@@ -12,8 +12,8 @@ void segment_fault_handler(int signum) {
     printf("handling segmentation fault!\n");
     
     /* Step 2: Handle segfault and change the stack*/
-    int *PC =&signum + 0xf;
-    *PC += 0x2;
+    int *PC =&signum + 0xf; //finding the PC
+    *PC += 0x2; // skiping the bad instruction
 
 }   
 
