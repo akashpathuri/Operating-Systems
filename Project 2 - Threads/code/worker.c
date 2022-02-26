@@ -1,6 +1,6 @@
 // File:	worker.c
 
-// List all group member's name:
+// List all group member's name: Akash Pathuri
 // username of iLab:
 // iLab Server:
 
