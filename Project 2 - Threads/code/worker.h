@@ -30,7 +30,8 @@ typedef struct TCB {
 	// thread priority
 	// And more ...
 
-	// YOUR CODE HERE
+	ucontext_t *cxt;
+	int id;
 } tcb; 
 
 /* mutex struct definition */

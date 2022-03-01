@@ -3,11 +3,16 @@
 // List all group member's name: Akash Pathuri
 // username of iLab:
 // iLab Server:
+#include <ucontext.h>
+#include <signal.h>
 
 #include "worker.h"
+
 // INITAILIZE ALL YOUR VARIABLES HERE
 // YOUR CODE HERE
+#define STACK_SIZE SIGSTKSZ
 
+int threadCount = 0;
 
 /* create a new thread */
 int worker_create(worker_t * thread, pthread_attr_t * attr, 
@@ -18,8 +23,25 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
        // - allocate space of stack for this thread to run
        // after everything is set, push this thread into run queue and 
        // - make it ready for the execution.
+	if(threadCount == 0){
+		ucontext_t masterCXT;
+		tcb *masterThread = (tcb*) malloc(sizeof(tcb));
+		masterThread->id = threadCount;
+		masterThread->cxt = masterCXT;
 
-       // YOUR CODE HERE
+	}
+
+	threadCount++;
+	ucontext_t cxt;
+
+	cxt.uc_link=NULL;
+	cxt.uc_stack.ss_sp = malloc(STACK_SIZE);;
+	cxt.uc_stack.ss_size=STACK_SIZE;
+	cxt.uc_stack.ss_flags=0;
+
+	makecontext(&cxt,(void *)&function, 1, arg);
+	tcb *thread = (tcb*) malloc(sizeof(tcb));
+	thread->id = threadCount;
 	
     return 0;
 };
