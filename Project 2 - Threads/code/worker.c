@@ -13,6 +13,7 @@
 #define STACK_SIZE SIGSTKSZ
 
 int threadCount = 0;
+ready_queue ready_state;
 
 /* create a new thread */
 int worker_create(worker_t * thread, pthread_attr_t * attr, 
@@ -27,21 +28,22 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 		ucontext_t masterCXT;
 		tcb *masterThread = (tcb*) malloc(sizeof(tcb));
 		masterThread->id = threadCount;
-		masterThread->cxt = masterCXT;
+		masterThread->context = masterCXT;
 
 	}
 
 	threadCount++;
-	ucontext_t cxt;
+	ucontext_t context;
 
-	cxt.uc_link=NULL;
-	cxt.uc_stack.ss_sp = malloc(STACK_SIZE);;
-	cxt.uc_stack.ss_size=STACK_SIZE;
-	cxt.uc_stack.ss_flags=0;
+	context.uc_link=NULL;
+	context.uc_stack.ss_sp = malloc(STACK_SIZE);;
+	context.uc_stack.ss_size=STACK_SIZE;
+	context.uc_stack.ss_flags=0;
 
-	makecontext(&cxt,(void *)&function, 1, arg);
-	tcb *thread = (tcb*) malloc(sizeof(tcb));
-	thread->id = threadCount;
+	makecontext(&context,(void *)&function, 1, arg);
+	tcb *newthread = (tcb*) malloc(sizeof(tcb));
+	newthread->id = threadCount;
+	newthread->context = context;
 	
     return 0;
 };
@@ -157,5 +159,5 @@ static void sched_mlfq() {
 
 // Feel free to add any other functions you need
 
-// YOUR CODE HERE
+static void 
 

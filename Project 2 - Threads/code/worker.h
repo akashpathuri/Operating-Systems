@@ -30,7 +30,7 @@ typedef struct TCB {
 	// thread priority
 	// And more ...
 
-	ucontext_t *cxt;
+	ucontext_t context;
 	int id;
 } tcb; 
 
@@ -45,6 +45,26 @@ typedef struct worker_mutex_t {
 // Feel free to add your own auxiliary data structures (linked list or queue etc...)
 
 // YOUR CODE HERE
+typedef struct thread_node {
+    int thread_id;
+	struct tcb *thread;
+    struct thread_node *next_thread;
+} thread_node;
+
+typedef struct ready_queue{
+	thread_node *first_node;
+	thread_node *last_node;
+}ready_queue;
+
+typedef struct run_queue{
+	thread_node first_node;
+	thread_node last_node;
+}run_queue;
+
+typedef struct blocked_queue{
+	thread_node first_node;
+	thread_node last_node;
+}blocked_queue;
 
 
 /* Function Declarations: */
