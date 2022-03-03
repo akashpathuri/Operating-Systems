@@ -64,7 +64,7 @@ typedef struct queue_level{
 //contains all my_pthread_t that are runnable
 typedef struct ready_queue {
 
-queue_level *subqueues[NUM_LEVELS];
+	queue_level *subqueues[NUM_LEVELS];
 
 } ready_queue;
 
