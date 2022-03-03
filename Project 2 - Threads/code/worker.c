@@ -1,19 +1,17 @@
 // File:	worker.c
 
-// List all group member's name: Akash Pathuri
-// username of iLab:
-// iLab Server:
+// List all group member's name: Akash Pathuri, Michael Elkhouri
+// username of iLab: arp229, mre66
+// iLab Server: ilab4.cs.rutgers.edu
 #include <ucontext.h>
 #include <signal.h>
 
 #include "worker.h"
 
-// INITAILIZE ALL YOUR VARIABLES HERE
-// YOUR CODE HERE
 #define STACK_SIZE SIGSTKSZ
 
 int threadCount = 0;
-ready_queue ready_state;
+ready_queue *ready_states[PRIORITY_LEVELS];
 
 /* create a new thread */
 int worker_create(worker_t * thread, pthread_attr_t * attr, 
@@ -44,7 +42,10 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 	tcb *newthread = (tcb*) malloc(sizeof(tcb));
 	newthread->id = threadCount;
 	newthread->context = context;
-	
+	thread_node *new_thread_node = (thread_node*) malloc(sizeof(thread_node));
+	new_thread_node->thread_tcb = newthread;
+	new_thread_node->next_thread = NULL;
+	enqueue(new_thread_node, 0);
     return 0;
 };
 
@@ -159,5 +160,28 @@ static void sched_mlfq() {
 
 // Feel free to add any other functions you need
 
-static void 
+void enqueue(thread_node * thread, int level){
+	if(ready_states[level]->first_node == NULL){
+		ready_states[level]->first_node = thread;
+		ready_states[level]->last_node = thread;
+	}else{
+		ready_states[level]->last_node->next_thread = thread;
+		ready_states[level]->last_node = thread;
+	}
+	
+}
+
+thread_node *dequeue(int level){
+	if(ready_states[level]->first_node == NULL){
+		return NULL;
+	}
+	thread_node *temp = ready_states[level]->first_node;
+	ready_states[level]->first_node = ready_states[level]->first_node->next_thread;
+	
+	if(ready_states[level]->first_node == NULL){
+		ready_states[level]->last_node = NULL;
+	}
+	return temp;
+}
+
 

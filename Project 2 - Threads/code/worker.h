@@ -1,11 +1,15 @@
 // File:	worker_t.h
 
-// List all group member's name:
-// username of iLab:
-// iLab Server:
+// List all group member's name: Akash Pathuri, Michael Elkhouri
+// username of iLab: arp229, mre66
+// iLab Server: ilab4.cs.rutgers.edu
 
 #ifndef WORKER_T_H
 #define WORKER_T_H
+#define PRIORITY_LEVELS 8
+#define RUNNING 0
+#define READY 1
+#define BlOCKED 2
 
 #define _GNU_SOURCE
 
@@ -32,6 +36,10 @@ typedef struct TCB {
 
 	ucontext_t context;
 	int id;
+	int priority;
+	int status;
+
+	void *stack_pointer;
 } tcb; 
 
 /* mutex struct definition */
@@ -41,13 +49,9 @@ typedef struct worker_mutex_t {
 	// YOUR CODE HERE
 } worker_mutex_t;
 
-/* define your data structures here: */
-// Feel free to add your own auxiliary data structures (linked list or queue etc...)
 
-// YOUR CODE HERE
 typedef struct thread_node {
-    int thread_id;
-	struct tcb *thread;
+	struct tcb *thread_tcb;
     struct thread_node *next_thread;
 } thread_node;
 
@@ -106,5 +110,9 @@ int worker_mutex_destroy(worker_mutex_t *mutex);
 #define pthread_mutex_unlock worker_mutex_unlock
 #define pthread_mutex_destroy worker_mutex_destroy
 #endif
+
+//helper functions
+void enqueue(thread_node * thread, int level);
+
 
 #endif
