@@ -20,7 +20,7 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
        // - create Thread Control Block (TCB)
        // - create and initialize the context of this worker thread
        // - allocate space of stack for this thread to run
-       // after everything is set, push this thread into run queue and 
+       // - after everything is set, push this thread into run queue and 
        // - make it ready for the execution.
 	if(threadCount == 0){
 		ucontext_t masterCXT;
