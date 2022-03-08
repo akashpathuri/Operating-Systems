@@ -11,6 +11,7 @@
 #define READY 1
 #define BlOCKED 2
 
+
 #define _GNU_SOURCE
 
 /* To use Linux pthread Library in Benchmark, you have to comment the USE_WORKERS macro */
@@ -35,40 +36,34 @@ typedef struct TCB {
 	// And more ...
 
 	ucontext_t context;
-	int id;
+	worker_t id;
+	worker_t joinID; 
+	//worker_mutex_t mutex;
 	int priority;
 	int status;
-
-	void *stack_pointer;
+	void *value_ptr; //stack pointer
 } tcb; 
 
 /* mutex struct definition */
 typedef struct worker_mutex_t {
 	/* add something here */
-
+	//int init;
+    //volatile int lock;
+    //volatile int queueLock;
+    //thread_queue * waitQueue;
 	// YOUR CODE HERE
 } worker_mutex_t;
 
 
 typedef struct thread_node {
-	struct tcb *thread_tcb;
-    struct thread_node *next_thread;
+	tcb *thread_tcb;
+    thread_node *next_thread;
 } thread_node;
 
-typedef struct ready_queue{
+typedef struct thread_queue{
 	thread_node *first_node;
 	thread_node *last_node;
-}ready_queue;
-
-typedef struct run_queue{
-	thread_node first_node;
-	thread_node last_node;
-}run_queue;
-
-typedef struct blocked_queue{
-	thread_node first_node;
-	thread_node last_node;
-}blocked_queue;
+}thread_queue;
 
 
 /* Function Declarations: */
@@ -112,7 +107,8 @@ int worker_mutex_destroy(worker_mutex_t *mutex);
 #endif
 
 //helper functions
-void enqueue(thread_node * thread, int level);
+void enqueue(thread_node *thread, thread_queue *queue);
 
+thread_node *dequeue(thread_queue *queue);
 
 #endif

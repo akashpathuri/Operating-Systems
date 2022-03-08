@@ -5,15 +5,22 @@
 // iLab Server: ilab4.cs.rutgers.edu
 #include <ucontext.h>
 #include <signal.h>
+#include <sys/time.h>
 
 #include "worker.h"
 
 #define STACK_SIZE SIGSTKSZ
 
 int threadCount = 0;
-ready_queue *ready_states[PRIORITY_LEVELS];
+int freeNode = 0; //remove if not used
+int exitCalled = 0; //remove if not used
 
-/* create a new thread */
+thread_queue *ready_queue[PRIORITY_LEVELS];
+thread_queue *exit_queue;
+thread_queue *waiting_queue;
+thread_queue *join_queue;
+
+thread_node *currentNode;
 int worker_create(worker_t * thread, pthread_attr_t * attr, 
                       void *(*function)(void*), void * arg) {
 
@@ -25,9 +32,9 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 	if(threadCount == 0){
 		ucontext_t masterCXT;
 		tcb *masterThread = (tcb*) malloc(sizeof(tcb));
-		masterThread->id = threadCount;
+		masterThread->id = thread;
 		masterThread->context = masterCXT;
-
+		//Later on in the project-----------------
 	}
 
 	threadCount++;
@@ -40,12 +47,17 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 
 	makecontext(&context,(void *)&function, 1, arg);
 	tcb *newthread = (tcb*) malloc(sizeof(tcb));
-	newthread->id = threadCount;
+	newthread->id = thread;
 	newthread->context = context;
 	thread_node *new_thread_node = (thread_node*) malloc(sizeof(thread_node));
 	new_thread_node->thread_tcb = newthread;
 	new_thread_node->next_thread = NULL;
-	enqueue(new_thread_node, 0);
+	enqueue(new_thread_node, ready_queue[0]);
+
+	if(threadCount== 1){
+		schedule();
+	}
+
     return 0;
 };
 
@@ -57,7 +69,8 @@ int worker_yield() {
 	// - switch from thread context to scheduler context
 
 	// YOUR CODE HERE
-	
+	schedule();
+
 	return 0;
 };
 
@@ -66,6 +79,28 @@ void worker_exit(void *value_ptr) {
 	// - de-allocate any dynamic memory created when starting this thread
 
 	// YOUR CODE HERE
+	
+	
+	 if (currentNode->thread_tcb->id == 0){
+        exit(1);
+    }
+	//*/*/*/*/*/*/*/*/*/*/*/**/*/*/*/*/**/*/*/*/***/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*
+	//figure out what this is ----------------------------------------------------------------------------------------
+    //search joinQueue to see if thread that called join on currentThread exists there
+    if (searchJoin(currentNode->thread_tcb->id) == -1){
+        dequeue(ready_queue[currentNode->thread_tcb->priority]);
+        enqueue(currentNode, exit_queue);
+    }
+    else {
+        dequeue(ready_queue[currentNode->thread_tcb->priority]);
+        freeNode = 1;
+    }
+
+    currentNode->thread_tcb->value_ptr = value_ptr;
+    exitCalled = 1;
+    scheduler();
+
+
 };
 
 
@@ -76,6 +111,22 @@ int worker_join(worker_t thread, void **value_ptr) {
 	// - de-allocate any dynamic memory created by the joining thread
   
 	// YOUR CODE HERE
+
+	//*/*/*/*/*/*/*/*/*/*/*/**/*/*/*/*/**/*/*/*/***/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*
+	//figure out what this is ----------------------------------------------------------------------------------------
+    
+	if (searchExit(thread) == -1){
+        currentNode->thread_tcb->joinID = &thread; 
+        dequeue(ready_queue[currentNode->thread_tcb->priority]); 
+        enqueue(currentNode, join_queue);
+       // joinCalled = 1;
+        //printf("adding thread to joinQueue: %d", currentNode->mythread->tid);
+        //printf("thread parameter: %d saved parameter: %d\n", thread, currentNode->mythread->joinOn);
+        scheduler();
+    }
+
+
+
 	return 0;
 };
 
@@ -126,18 +177,16 @@ static void schedule() {
 
 	// - invoke scheduling algorithms according to the policy (RR or MLFQ)
 
-	// if (sched == RR)
-	//		sched_rr();
-	// else if (sched == MLFQ)
-	// 		sched_mlfq();
 
 	// YOUR CODE HERE
 
 // - schedule policy
 #ifndef MLFQ
 	// Choose RR
+	sched_rr();
 #else 
 	// Choose MLFQ
+	sched_mlfq();
 #endif
 
 }
@@ -159,27 +208,27 @@ static void sched_mlfq() {
 }
 
 // Feel free to add any other functions you need
-
-void enqueue(thread_node * thread, int level){
-	if(ready_states[level]->first_node == NULL){
-		ready_states[level]->first_node = thread;
-		ready_states[level]->last_node = thread;
+void enqueue(thread_node * thread, thread_queue *queue){
+	if(queue->first_node == NULL){
+		queue->first_node = thread;
+		queue->last_node = thread;
 	}else{
-		ready_states[level]->last_node->next_thread = thread;
-		ready_states[level]->last_node = thread;
+		queue->last_node->next_thread = thread;
+		queue->last_node = thread;
 	}
 	
 }
 
-thread_node *dequeue(int level){
-	if(ready_states[level]->first_node == NULL){
+
+thread_node *dequeue(thread_queue *queue){
+	if(queue->first_node == NULL){
 		return NULL;
 	}
-	thread_node *temp = ready_states[level]->first_node;
-	ready_states[level]->first_node = ready_states[level]->first_node->next_thread;
-	
-	if(ready_states[level]->first_node == NULL){
-		ready_states[level]->last_node = NULL;
+	thread_node *temp = queue->first_node;
+	queue->first_node = queue->first_node->next_thread;
+	temp->next_thread = NULL;
+	if(queue->first_node == NULL){
+		queue->last_node = NULL;
 	}
 	return temp;
 }
