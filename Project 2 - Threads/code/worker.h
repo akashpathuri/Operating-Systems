@@ -65,7 +65,7 @@ typedef struct thread_node {
 typedef struct thread_queue{
 	thread_node *first_node;
 	thread_node *last_node;
-	int size
+	int size;
 }thread_queue;
 
 
@@ -111,7 +111,8 @@ int worker_mutex_destroy(worker_mutex_t *mutex);
 
 //helper functions
 void enqueue(thread_node *thread, thread_queue *queue);
-
 thread_node *dequeue(thread_queue *queue);
+void create_schedule_context();
+void create_queue(thread_queue* queue);
 
 #endif

@@ -41,7 +41,7 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 	context->uc_stack.ss_size = STACK_SIZE;
 	context->uc_stack.ss_flags = 0;
 
-	makecontext(&context,(void *)&function, 1, arg);
+	makecontext(context,(void *)&function, 1, arg);
 	tcb *new_thread = (tcb*) malloc(sizeof(tcb));
 	thread = thread_count;
 	new_thread->id = thread;
@@ -227,6 +227,8 @@ static void sched_rr() {
 	// (feel free to modify arguments and return types)
 
 	// YOUR CODE HERE
+
+
 }
 
 /* Preemptive MLFQ scheduling algorithm */
