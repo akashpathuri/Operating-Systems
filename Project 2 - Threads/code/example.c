@@ -363,7 +363,6 @@ int my_pthread_mutex_destroy(my_pthread_mutex_t *mutex){
 */
 //////////////////////////////////////////
 
-
 /*
 saves context of current thread and determines which thread will be run
 next and for how long. Also recalcuates the current thread's priority
@@ -543,7 +542,6 @@ threadNode * dequeueReady(int level){
 
 }
 
-
 //takes currentNode and demotes it to another level 
 void updateQueues(){
     int level = currentNode->level;
@@ -711,7 +709,6 @@ int searchExit(int tid){
     return -1; 
 
 }
-
 
 void enqueueMutex(wait_queue *waitQueue, threadNode * node){
     //printf("enqueueMutex thread: %d\n", node->mythread->tid);

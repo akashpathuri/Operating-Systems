@@ -11,7 +11,7 @@
 
 #define STACK_SIZE SIGSTKSZ
 
-int threadCount = 0;
+int thread_count = 0;
 int freeNode = 0; //remove if not used
 int exitCalled = 0; //remove if not used
 
@@ -21,6 +21,8 @@ thread_queue *waiting_queue;
 thread_queue *join_queue;
 
 thread_node *currentNode;
+ucontext_t *scheduler_context;
+
 int worker_create(worker_t * thread, pthread_attr_t * attr, 
                       void *(*function)(void*), void * arg) {
 
@@ -29,33 +31,51 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
        // - allocate space of stack for this thread to run
        // - after everything is set, push this thread into run queue and 
        // - make it ready for the execution.
-	if(threadCount == 0){
-		ucontext_t masterCXT;
-		tcb *masterThread = (tcb*) malloc(sizeof(tcb));
-		masterThread->id = thread;
-		masterThread->context = masterCXT;
-		//Later on in the project-----------------
-	}
 
-	threadCount++;
-	ucontext_t context;
 
-	context.uc_link=NULL;
-	context.uc_stack.ss_sp = malloc(STACK_SIZE);;
-	context.uc_stack.ss_size=STACK_SIZE;
-	context.uc_stack.ss_flags=0;
+	thread_count++;
+	ucontext_t *context = (ucontext_t*)malloc(sizeof(ucontext_t));
+
+	context->uc_link = NULL;
+	context->uc_stack.ss_sp = malloc(STACK_SIZE);;
+	context->uc_stack.ss_size = STACK_SIZE;
+	context->uc_stack.ss_flags = 0;
 
 	makecontext(&context,(void *)&function, 1, arg);
-	tcb *newthread = (tcb*) malloc(sizeof(tcb));
-	newthread->id = thread;
-	newthread->context = context;
+	tcb *new_thread = (tcb*) malloc(sizeof(tcb));
+	thread = thread_count;
+	new_thread->id = thread;
+	new_thread->context = context;
+	new_thread->status = READY;
+	new_thread->priority = 0;
 	thread_node *new_thread_node = (thread_node*) malloc(sizeof(thread_node));
-	new_thread_node->thread_tcb = newthread;
+	new_thread_node->thread_tcb = new_thread;
 	new_thread_node->next_thread = NULL;
-	enqueue(new_thread_node, ready_queue[0]);
+	
 
-	if(threadCount== 1){
+	if(thread_count == 1){
+		ucontext_t *main_context = (ucontext_t*)malloc(sizeof(ucontext_t));
+		tcb *main_thread = (tcb*) malloc(sizeof(tcb));
+		main_thread->id = 0;
+		main_thread->context = getcontext(main_context);
+		main_thread->status = RUNNING;
+		main_thread->priority = 0;
+		//initilize ready queue...........
+		for(int x = 0; x<PRIORITY_LEVELS; x++){
+			create_queue(ready_queue[x]);
+		}
+		thread_node *main_thread_node = (thread_node*) malloc(sizeof(thread_node));
+		main_thread_node->thread_tcb = main_thread;
+		main_thread_node->next_thread = NULL;
+		currentNode = main_thread_node;
+		enqueue(main_thread_node, ready_queue[0]);
+		enqueue(new_thread_node, ready_queue[0]);
+
+		create_schedule_context();
 		schedule();
+		//Later on in the project-----------------
+	}else{
+		enqueue(new_thread_node, ready_queue[0]);
 	}
 
     return 0;
@@ -69,7 +89,9 @@ int worker_yield() {
 	// - switch from thread context to scheduler context
 
 	// YOUR CODE HERE
-	schedule();
+	//schedule();
+	currentNode->thread_tcb->status = READY;
+	swapcontext(currentNode->thread_tcb->context, scheduler_context);
 
 	return 0;
 };
@@ -79,15 +101,23 @@ void worker_exit(void *value_ptr) {
 	// - de-allocate any dynamic memory created when starting this thread
 
 	// YOUR CODE HERE
+	if (value_ptr != NULL) {
+    	currentNode->thread_tcb->value_ptr = value_ptr;
+  	}
+
+	currentNode->thread_tcb->status = DONE;
 	
-	
-	 if (currentNode->thread_tcb->id == 0){
-        exit(1);
-    }
+	swapcontext(currentNode->thread_tcb->context, scheduler_context);
+
 	//*/*/*/*/*/*/*/*/*/*/*/**/*/*/*/*/**/*/*/*/***/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*
 	//figure out what this is ----------------------------------------------------------------------------------------
     //search joinQueue to see if thread that called join on currentThread exists there
-    if (searchJoin(currentNode->thread_tcb->id) == -1){
+
+	/*if (currentNode->thread_tcb->id == 0){
+        exit(1);
+    }
+	
+	if (searchJoin(currentNode->thread_tcb->id) == -1){
         dequeue(ready_queue[currentNode->thread_tcb->priority]);
         enqueue(currentNode, exit_queue);
     }
@@ -98,7 +128,7 @@ void worker_exit(void *value_ptr) {
 
     currentNode->thread_tcb->value_ptr = value_ptr;
     exitCalled = 1;
-    scheduler();
+    scheduler();*/
 
 
 };
@@ -216,6 +246,7 @@ void enqueue(thread_node * thread, thread_queue *queue){
 		queue->last_node->next_thread = thread;
 		queue->last_node = thread;
 	}
+	queue->size++;
 	
 }
 
@@ -230,7 +261,26 @@ thread_node *dequeue(thread_queue *queue){
 	if(queue->first_node == NULL){
 		queue->last_node = NULL;
 	}
+	queue->size--;
 	return temp;
+}
+
+void create_queue(thread_queue* queue) {
+	queue = (thread_queue*) malloc(sizeof(thread_queue));
+	queue->first_node = NULL;
+	queue->last_node = NULL;
+	queue->size = 0;
+}
+
+void create_schedule_context() {
+	scheduler_context = (ucontext_t*) malloc(sizeof(ucontext_t));
+	scheduler_context->uc_link = NULL; 
+	scheduler_context->uc_stack.ss_sp = malloc(STACK_SIZE); 
+	scheduler_context->uc_stack.ss_size = STACK_SIZE; 
+	scheduler_context->uc_stack.ss_flags = 0;
+
+	makecontext(scheduler_context, &schedule, 1, NULL);
+
 }
 
 

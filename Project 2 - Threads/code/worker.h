@@ -10,12 +10,13 @@
 #define RUNNING 0
 #define READY 1
 #define BlOCKED 2
+#define DONE 3
 
 
 #define _GNU_SOURCE
 
 /* To use Linux pthread Library in Benchmark, you have to comment the USE_WORKERS macro */
-#define USE_WORKERS 1
+//#define USE_WORKERS 1
 
 /* include lib header files that you need here: */
 #include <unistd.h>
@@ -23,6 +24,7 @@
 #include <sys/types.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <ucontext.h>
 
 typedef uint worker_t;
 
@@ -34,13 +36,13 @@ typedef struct TCB {
 	// thread stack
 	// thread priority
 	// And more ...
-
-	ucontext_t context;
 	worker_t id;
+	ucontext_t *context;
 	worker_t joinID; 
 	//worker_mutex_t mutex;
 	int priority;
 	int status;
+	int elapsed_counter;
 	void *value_ptr; //stack pointer
 } tcb; 
 
@@ -57,12 +59,13 @@ typedef struct worker_mutex_t {
 
 typedef struct thread_node {
 	tcb *thread_tcb;
-    thread_node *next_thread;
+    struct thread_node *next_thread;
 } thread_node;
 
 typedef struct thread_queue{
 	thread_node *first_node;
 	thread_node *last_node;
+	int size
 }thread_queue;
 
 
