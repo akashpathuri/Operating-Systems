@@ -16,7 +16,7 @@
 #define _GNU_SOURCE
 
 /* To use Linux pthread Library in Benchmark, you have to comment the USE_WORKERS macro */
-//#define USE_WORKERS 1
+#define USE_WORKERS 1
 
 /* include lib header files that you need here: */
 #include <unistd.h>
@@ -43,7 +43,9 @@ typedef struct TCB {
 	int priority;
 	int status;
 	int elapsed_counter;
-	void *value_ptr; //stack pointer
+	void *return_ptr; //stack pointer
+	struct TCB *next_thread;
+
 } tcb; 
 
 /* mutex struct definition */
@@ -59,12 +61,12 @@ typedef struct worker_mutex_t {
 
 typedef struct thread_node {
 	tcb *thread_tcb;
-    struct thread_node *next_thread;
+    //struct thread_node *next_thread;
 } thread_node;
 
 typedef struct thread_queue{
-	thread_node *first_node;
-	thread_node *last_node;
+	tcb *first_node;
+	tcb *last_node;
 	int size;
 }thread_queue;
 
@@ -110,8 +112,12 @@ int worker_mutex_destroy(worker_mutex_t *mutex);
 #endif
 
 //helper functions
-void enqueue(thread_node *thread, thread_queue *queue);
-thread_node *dequeue(thread_queue *queue);
+static void schedule();
+static void sched_rr();
+static void sched_mlfq();
+
+void enqueue(tcb *thread, thread_queue *queue);
+tcb *dequeue(thread_queue *queue);
 void create_schedule_context();
 void create_queue(thread_queue* queue);
 
