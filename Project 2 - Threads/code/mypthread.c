@@ -222,6 +222,7 @@ int mypthread_yield() {
     // change thread state from Running to Ready
 	// save context of this thread to its thread control block
 	// switch from thread context to scheduler context
+	
     tcb* thread = threads_queue->head->item;
     thread->state = READY;
     moveToBack(threads_queue, thread);

@@ -3,22 +3,16 @@
 // List all group member's name: Akash Pathuri, Michael Elkhouri
 // username of iLab: arp229, mre66
 // iLab Server: ilab4.cs.rutgers.edu
-#include <ucontext.h>
-#include <signal.h>
-#include <sys/time.h>
-
 #include "worker.h"
 
-#define STACK_SIZE SIGSTKSZ
 
 int thread_count = 0;
 int freeNode = 0; //remove if not used
 int exitCalled = 0; //remove if not used
 
+struct itimerval it_val;
+
 thread_queue *ready_queue[PRIORITY_LEVELS];
-thread_queue *exit_queue;
-thread_queue *waiting_queue;
-thread_queue *join_queue;
 
 tcb *currentNode;
 ucontext_t *scheduler_context;
@@ -43,6 +37,7 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 
 	makecontext(context,(void *)&function, 1, arg);
 	tcb *new_thread = (tcb*) malloc(sizeof(tcb));
+	memset(new_thread, 0, sizeof(tcb));
 	thread = &(thread_count);
 	new_thread->id = *thread;
 	new_thread->context = context;
@@ -57,6 +52,7 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 	if(thread_count == 1){
 		ucontext_t *main_context = (ucontext_t*)malloc(sizeof(ucontext_t));
 		tcb *main_thread = (tcb*) malloc(sizeof(tcb));
+		memset(main_thread, 0, sizeof(tcb));
 		main_thread->id = 0;
 		main_thread->context = main_context;
 		main_thread->status = RUNNING;
@@ -66,6 +62,8 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 		for(int x = 0; x<PRIORITY_LEVELS; x++){
 			create_queue(ready_queue[x]);
 		}
+
+
 		/*thread_node *main_thread_node = (thread_node*) malloc(sizeof(thread_node));
 		main_thread_node->thread_tcb = main_thread;
 		main_thread_node->next_thread = NULL;*/
@@ -73,7 +71,8 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 		enqueue(main_thread, ready_queue[0]);
 		enqueue(new_thread, ready_queue[0]);
 
-		create_schedule_context();
+		//create_schedule_context();
+		create_timer();
 		schedule();
 		//Later on in the project-----------------
 	}else{
@@ -92,8 +91,10 @@ int worker_yield() {
 
 	// YOUR CODE HERE
 	//schedule();
-	currentNode->status = READY;
-	swapcontext(currentNode->context, scheduler_context);
+	//currentNode->status = READY;
+	//enqueue(dequeue(ready_queue[currentNode->priority]), ready_queue[currentNode->priority]);
+	schedule();
+	//swapcontext(currentNode->context, currentNode->next_thread->context);
 
 	return 0;
 };
@@ -106,10 +107,18 @@ void worker_exit(void *value_ptr) {
 	if (value_ptr != NULL) {
     	currentNode->return_ptr = value_ptr;
   	}
-
+	
 	currentNode->status = DONE;
 	
-	swapcontext(currentNode->context, scheduler_context);
+	
+	// traverse the thread queue to find the currentNode ID in any of the elements' waiting queue list of the tcb. 
+
+
+
+	dequeue(ready_queue[currentNode->priority]);
+	free(currentNode->context->uc_stack.ss_sp);
+	free(currentNode);
+	//setcontext(scheduler_context);
 
 	//*/*/*/*/*/*/*/*/*/*/*/**/*/*/*/*/**/*/*/*/***/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*
 	//figure out what this is ----------------------------------------------------------------------------------------
@@ -130,7 +139,8 @@ void worker_exit(void *value_ptr) {
 
     currentNode->thread_tcb->value_ptr = value_ptr;
     exitCalled = 1;
-    scheduler();*/
+    scheduler();
+	*/
 
 
 };
@@ -146,17 +156,14 @@ int worker_join(worker_t thread, void **value_ptr) {
 
 	//*/*/*/*/*/*/*/*/*/*/*/**/*/*/*/*/**/*/*/*/***/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*
 	//figure out what this is ----------------------------------------------------------------------------------------
-    
-	//if (searchExit(thread) == -1){
-        currentNode->joinID = thread; 
-        dequeue(ready_queue[currentNode->priority]); 
-        enqueue(currentNode, join_queue);
-       // joinCalled = 1;
-        //printf("adding thread to joinQueue: %d", currentNode->mythread->tid);
-        //printf("thread parameter: %d saved parameter: %d\n", thread, currentNode->mythread->joinOn);
-        schedule();
-    //}
-
+   
+	// if (searchQueue(thread) == -1){
+	// 	currentNode->status = BLOCKED;
+    //     currentNode->joinID = thread; 
+    //     dequeue(ready_queue[currentNode->priority]); 
+    //     enqueue(currentNode, join_queue);
+    //     schedule();
+    // }
 
 
 	return 0;
@@ -208,27 +215,36 @@ static void schedule() {
 	// schedule() function
 
 	// - invoke scheduling algorithms according to the policy (RR or MLFQ)
+	//swapcontext(ready_queue[0]->first_node->context);
 
 
 	// YOUR CODE HERE
-
-// - schedule policy
-#ifndef MLFQ
-	// Choose RR
-	sched_rr();
-#else 
-	// Choose MLFQ
-	sched_mlfq();
-#endif
+	sched_rr(0);
+	// - schedule policy
+//	#ifndef MLFQ
+		// Choose RR
+		
+//	#else 
+		// Choose MLFQ
+//		sched_mlfq();
+//	#endif
 
 }
 
 /* Round-robin (RR) scheduling algorithm */
-static void sched_rr() {
+static void sched_rr(int level) {
 	// - your own implementation of RR
 	// (feel free to modify arguments and return types)
 
 	// YOUR CODE HERE
+	if(ready_queue[level]->size>1 && currentNode->id == ready_queue[level]->first_node->id){
+		tcb *running_thread = dequeue(ready_queue[level]);
+		running_thread->status = READY;
+		enqueue(running_thread, ready_queue[level]);
+		currentNode = ready_queue[level]->first_node;
+		currentNode->status = RUNNING;
+		swapcontext(running_thread->context, currentNode->context);
+	}
 	//ready_queue[0]->first_node->thread_tcb.
 
 
@@ -279,13 +295,46 @@ void create_queue(thread_queue* queue) {
 
 void create_schedule_context() {
 	scheduler_context = (ucontext_t*) malloc(sizeof(ucontext_t));
-	scheduler_context->uc_link = NULL; 
-	scheduler_context->uc_stack.ss_sp = malloc(STACK_SIZE); 
-	scheduler_context->uc_stack.ss_size = STACK_SIZE; 
+	scheduler_context->uc_link = NULL;
+	scheduler_context->uc_stack.ss_sp = malloc(STACK_SIZE);
+	scheduler_context->uc_stack.ss_size = STACK_SIZE;
 	scheduler_context->uc_stack.ss_flags = 0;
 
 	makecontext(scheduler_context, &schedule, 1, NULL);
-
 }
 
+void create_timer(){
+	if (signal(SIGALRM, (void (*)(int)) schedule) == SIG_ERR) {
+		printf("Unable to catch SIGALRM");
+		exit(1);
+  	}
 
+	it_val.it_value.tv_sec =     INTERVAL/1000;
+  	it_val.it_value.tv_usec =    (INTERVAL*1000) % 1000000;	
+  	it_val.it_interval = it_val.it_value;
+
+	if (setitimer(ITIMER_REAL, &it_val, NULL) == -1) {
+		printf("error calling setitimer()");
+		exit(1);
+	}
+}
+/*
+int searchQueue(worker_t id, struct thread_queue * queue){
+	
+	thread_node * curr = queue->first_node; 
+
+	while(curr != NULL){
+		if(curr->thread_tcb->id == id){
+			return 0;
+		}
+		curr->thread_tcb->next_thread;
+		
+	}
+
+
+
+
+	return -1;
+}
+
+*/

@@ -1,5 +1,6 @@
 {
 	"files.associations": {
-		"worker.h": "c"
+		"worker.h": "c",
+		"string.h": "c"
 	}
 }

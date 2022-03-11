@@ -9,8 +9,12 @@
 #define PRIORITY_LEVELS 8
 #define RUNNING 0
 #define READY 1
-#define BlOCKED 2
+#define BLOCKED 2
 #define DONE 3
+#define WAITING 4
+#define STACK_SIZE SIGSTKSZ
+#define INTERVAL 20
+
 
 
 #define _GNU_SOURCE
@@ -25,6 +29,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ucontext.h>
+#include <string.h>
+#include <signal.h>
+#include <sys/time.h>
 
 typedef uint worker_t;
 
@@ -39,12 +46,22 @@ typedef struct TCB {
 	worker_t id;
 	ucontext_t *context;
 	worker_t joinID; 
-	//worker_mutex_t mutex;
 	int priority;
 	int status;
 	int elapsed_counter;
 	void *return_ptr; //stack pointer
 	struct TCB *next_thread;
+	struct thread_queue *waiting;
+	/*
+	mypthread_t thread_id;
+    State state;
+    ucontext_t context;
+    void* return_values;
+
+    long elapsed_time;
+    mypthread_t waiting_on_thread_id;
+    Queue* waiting_to_join_queue;
+	*/
 
 } tcb; 
 
@@ -120,5 +137,6 @@ void enqueue(tcb *thread, thread_queue *queue);
 tcb *dequeue(thread_queue *queue);
 void create_schedule_context();
 void create_queue(thread_queue* queue);
+void create_timer();
 
 #endif
