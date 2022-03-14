@@ -10,8 +10,7 @@
 #define RUNNING 0
 #define READY 1
 #define BLOCKED 2
-#define DONE 3
-#define WAITING 4
+#define WAITING 3
 #define STACK_SIZE SIGSTKSZ
 #define INTERVAL 20
 
@@ -32,6 +31,7 @@
 #include <string.h>
 #include <signal.h>
 #include <sys/time.h>
+#include <errno.h>
 
 typedef uint worker_t;
 
@@ -45,13 +45,14 @@ typedef struct TCB {
 	// And more ...
 	worker_t id;
 	ucontext_t *context;
-	worker_t joinID; 
+	worker_t join_on; 
 	int priority;
 	int status;
 	int elapsed_counter;
 	void *return_ptr; //stack pointer
 	struct TCB *next_thread;
-	struct thread_queue *waiting;
+	struct TCB *next_waiting_thread;
+	struct thread_queue *waiting_queue;
 	/*
 	mypthread_t thread_id;
     State state;
@@ -78,7 +79,7 @@ typedef struct worker_mutex_t {
 
 typedef struct thread_node {
 	tcb *thread_tcb;
-    //struct thread_node *next_thread;
+    struct thread_node *next_thread;
 } thread_node;
 
 typedef struct thread_queue{
@@ -138,5 +139,6 @@ tcb *dequeue(thread_queue *queue);
 void create_schedule_context();
 void create_queue(thread_queue* queue);
 void create_timer();
+void signal_handler (int signum);
 
 #endif

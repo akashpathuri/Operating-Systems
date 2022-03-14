@@ -14,8 +14,8 @@ struct itimerval it_val;
 
 thread_queue *ready_queue[PRIORITY_LEVELS];
 
-tcb *currentNode;
-ucontext_t *scheduler_context;
+tcb *current_node;
+ucontext_t *scheduler_context; //remove if not used
 
 int worker_create(worker_t * thread, pthread_attr_t * attr, 
                       void *(*function)(void*), void * arg) {
@@ -46,7 +46,7 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 	new_thread->next_thread = NULL;  
 	/*thread_node *new_thread_node = (thread_node*) malloc(sizeof(thread_node));
 	new_thread_node->thread_tcb = new_thread;
-	new_thread_node->next_thread = NULL;*/
+	new_thread_node->next_thread = NULL;*/  //remove if not used
 	
 
 	if(thread_count == 1){
@@ -66,15 +66,15 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 
 		/*thread_node *main_thread_node = (thread_node*) malloc(sizeof(thread_node));
 		main_thread_node->thread_tcb = main_thread;
-		main_thread_node->next_thread = NULL;*/
-		currentNode = main_thread;
+		main_thread_node->next_thread = NULL;*/ //remove if not used
+		current_node = main_thread;
 		enqueue(main_thread, ready_queue[0]);
 		enqueue(new_thread, ready_queue[0]);
+
 
 		//create_schedule_context();
 		create_timer();
 		schedule();
-		//Later on in the project-----------------
 	}else{
 		enqueue(new_thread, ready_queue[0]);
 	}
@@ -91,10 +91,10 @@ int worker_yield() {
 
 	// YOUR CODE HERE
 	//schedule();
-	//currentNode->status = READY;
-	//enqueue(dequeue(ready_queue[currentNode->priority]), ready_queue[currentNode->priority]);
+	//current_node->status = READY;
+	//enqueue(dequeue(ready_queue[current_node->priority]), ready_queue[current_node->priority]);
 	schedule();
-	//swapcontext(currentNode->context, currentNode->next_thread->context);
+	//swapcontext(current_node->context, current_node->next_thread->context);
 
 	return 0;
 };
@@ -104,43 +104,30 @@ void worker_exit(void *value_ptr) {
 	// - de-allocate any dynamic memory created when starting this thread
 
 	// YOUR CODE HERE
-	if (value_ptr != NULL) {
-    	currentNode->return_ptr = value_ptr;
-  	}
-	
-	currentNode->status = DONE;
-	
-	
-	// traverse the thread queue to find the currentNode ID in any of the elements' waiting queue list of the tcb. 
-
-
-
-	dequeue(ready_queue[currentNode->priority]);
-	free(currentNode->context->uc_stack.ss_sp);
-	free(currentNode);
-	//setcontext(scheduler_context);
-
-	//*/*/*/*/*/*/*/*/*/*/*/**/*/*/*/*/**/*/*/*/***/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*
-	//figure out what this is ----------------------------------------------------------------------------------------
-    //search joinQueue to see if thread that called join on currentThread exists there
-
-	/*if (currentNode->thread_tcb->id == 0){
+	if (current_node->id == 0){
+        printf("parent called exit\n");
         exit(1);
     }
-	
-	if (searchJoin(currentNode->thread_tcb->id) == -1){
-        dequeue(ready_queue[currentNode->thread_tcb->priority]);
-        enqueue(currentNode, exit_queue);
-    }
-    else {
-        dequeue(ready_queue[currentNode->thread_tcb->priority]);
-        freeNode = 1;
-    }
 
-    currentNode->thread_tcb->value_ptr = value_ptr;
-    exitCalled = 1;
-    scheduler();
-	*/
+	if (value_ptr != NULL) {
+    	current_node->return_ptr = value_ptr;
+  	}
+	
+	// traverse the thread queue to find the current_node ID in any of the elements' waiting queue list of the tcb. 
+	
+	dequeue(ready_queue[current_node->priority]);
+	if(current_node->waiting_queue !=NULL){
+		tcb * search_node = current_node->waiting_queue->first_node; 
+		while(search_node != NULL){
+			if(search_node->join_on == current_node->id)
+				search_node->status = READY;
+			search_node = search_node->next_waiting_thread;
+		}
+		free(current_node->waiting_queue);
+	}
+	free(current_node->context->uc_stack.ss_sp);
+	free(current_node);
+	schedule();
 
 
 };
@@ -153,18 +140,15 @@ int worker_join(worker_t thread, void **value_ptr) {
 	// - de-allocate any dynamic memory created by the joining thread
   
 	// YOUR CODE HERE
-
-	//*/*/*/*/*/*/*/*/*/*/*/**/*/*/*/*/**/*/*/*/***/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*
-	//figure out what this is ----------------------------------------------------------------------------------------
-   
-	// if (searchQueue(thread) == -1){
-	// 	currentNode->status = BLOCKED;
-    //     currentNode->joinID = thread; 
-    //     dequeue(ready_queue[currentNode->priority]); 
-    //     enqueue(currentNode, join_queue);
-    //     schedule();
-    // }
-
+	if (thread > thread_count){ //remove if not used
+		return ESRCH;
+	}
+	current_node->status = WAITING;
+	tcb *wait_on = find_thread(thread);
+	current_node->join_on = thread;
+	
+	enqueueWait(current_node, wait_on->waiting_queue);
+	schedule();
 
 	return 0;
 };
@@ -237,13 +221,13 @@ static void sched_rr(int level) {
 	// (feel free to modify arguments and return types)
 
 	// YOUR CODE HERE
-	if(ready_queue[level]->size>1 && currentNode->id == ready_queue[level]->first_node->id){
+	if(ready_queue[level]->size>1 && current_node->id == ready_queue[level]->first_node->id){
 		tcb *running_thread = dequeue(ready_queue[level]);
 		running_thread->status = READY;
 		enqueue(running_thread, ready_queue[level]);
-		currentNode = ready_queue[level]->first_node;
-		currentNode->status = RUNNING;
-		swapcontext(running_thread->context, currentNode->context);
+		current_node = ready_queue[level]->first_node;
+		current_node->status = RUNNING;
+		swapcontext(running_thread->context, current_node->context);
 	}
 	//ready_queue[0]->first_node->thread_tcb.
 
@@ -260,6 +244,9 @@ static void sched_mlfq() {
 
 // Feel free to add any other functions you need
 void enqueue(tcb * thread, thread_queue *queue){
+	if(queue == NULL)
+		create_queue(queue);
+
 	if(queue->first_node == NULL){
 		queue->first_node = thread;
 		queue->last_node = thread;
@@ -271,6 +258,21 @@ void enqueue(tcb * thread, thread_queue *queue){
 	
 }
 
+
+void enqueueWait(tcb * thread, thread_queue *queue){
+	if(queue == NULL)
+		create_queue(queue);
+
+	if(queue->first_node == NULL){
+		queue->first_node = thread;
+		queue->last_node = thread;
+	}else{
+		queue->last_node->next_waiting_thread = thread;
+		queue->last_node = thread;
+	}
+	queue->size++;
+	
+}
 
 tcb *dequeue(thread_queue *queue){
 	if(queue->first_node == NULL){
@@ -304,7 +306,7 @@ void create_schedule_context() {
 }
 
 void create_timer(){
-	if (signal(SIGALRM, (void (*)(int)) schedule) == SIG_ERR) {
+	if (signal(SIGALRM, (void (*)(int)) signal_handler) == SIG_ERR) {
 		printf("Unable to catch SIGALRM");
 		exit(1);
   	}
@@ -318,23 +320,29 @@ void create_timer(){
 		exit(1);
 	}
 }
-/*
-int searchQueue(worker_t id, struct thread_queue * queue){
-	
-	thread_node * curr = queue->first_node; 
 
-	while(curr != NULL){
-		if(curr->thread_tcb->id == id){
-			return 0;
-		}
-		curr->thread_tcb->next_thread;
-		
-	}
-
-
-
-
-	return -1;
+void signal_handler (int signum){
+    schedule();
 }
 
-*/
+tcb *find_thread(worker_t thread){
+	for(int x = 0; x<PRIORITY_LEVELS; x++){
+		tcb *search_node = search_queue(thread, ready_queue[x]);
+		if(search_node != NULL){
+			return search_node;
+		}
+	}
+	return NULL;
+}
+
+tcb *search_queue(worker_t thread, thread_queue *queue){
+	tcb * search_node = queue->first_node; 
+
+	while(search_node != NULL){
+		if(search_node->id == thread){
+			return search_node;
+		}
+		search_node = search_node->next_thread;
+	}
+	return NULL;
+}
