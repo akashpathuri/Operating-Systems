@@ -12,7 +12,7 @@ int exitCalled = 0; //remove if not used
 
 struct itimerval it_val;
 
-thread_queue *ready_queue[PRIORITY_LEVELS];
+thread_queue ready_queue[PRIORITY_LEVELS];
 
 tcb *current_node;
 ucontext_t *scheduler_context; //remove if not used
@@ -25,7 +25,6 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
        // - allocate space of stack for this thread to run
        // - after everything is set, push this thread into run queue and 
        // - make it ready for the execution.
-
 
 	thread_count++;
 	ucontext_t *context = (ucontext_t*)malloc(sizeof(ucontext_t));
@@ -59,8 +58,10 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 		main_thread->priority = 0;
 		main_thread->next_thread = NULL;
 		//initilize ready queue...........
+		
 		for(int x = 0; x<PRIORITY_LEVELS; x++){
-			create_queue(ready_queue[x]);
+			//create_queue(ready_queue[x]);
+			ready_queue[x].size = 0;
 		}
 
 
@@ -78,6 +79,7 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 	}else{
 		enqueue(new_thread, ready_queue[0]);
 	}
+		printf("Thread %ls \n", thread);
 
     return 0;
 };
@@ -121,7 +123,9 @@ void worker_exit(void *value_ptr) {
 		while(search_node != NULL){
 			if(search_node->join_on == current_node->id)
 				search_node->status = READY;
-			search_node = search_node->next_waiting_thread;
+			tcb * next_node = search_node->next_waiting_thread;
+			search_node->next_waiting_thread = NULL;
+			search_node = next_node;
 		}
 		free(current_node->waiting_queue);
 	}
@@ -140,13 +144,13 @@ int worker_join(worker_t thread, void **value_ptr) {
 	// - de-allocate any dynamic memory created by the joining thread
   
 	// YOUR CODE HERE
-	if (thread > thread_count){ //remove if not used
-		return ESRCH;
-	}
+	// if (thread > thread_count){ //remove if not used
+	// 	return ESRCH;
+	// }
 	current_node->status = WAITING;
 	tcb *wait_on = find_thread(thread);
 	current_node->join_on = thread;
-	
+	printf("testing\n");
 	enqueueWait(current_node, wait_on->waiting_queue);
 	schedule();
 
@@ -221,11 +225,14 @@ static void sched_rr(int level) {
 	// (feel free to modify arguments and return types)
 
 	// YOUR CODE HERE
-	if(ready_queue[level]->size>1 && current_node->id == ready_queue[level]->first_node->id){
+	if(ready_queue[level].size>1 && current_node->id == ready_queue[level].first_node->id){
 		tcb *running_thread = dequeue(ready_queue[level]);
 		running_thread->status = READY;
 		enqueue(running_thread, ready_queue[level]);
-		current_node = ready_queue[level]->first_node;
+		while(ready_queue[level].first_node->status != READY){
+			enqueue(dequeue(ready_queue[level]), ready_queue[level]);
+		}
+		current_node = ready_queue[level].first_node;
 		current_node->status = RUNNING;
 		swapcontext(running_thread->context, current_node->context);
 	}
@@ -243,18 +250,18 @@ static void sched_mlfq() {
 }
 
 // Feel free to add any other functions you need
-void enqueue(tcb * thread, thread_queue *queue){
-	if(queue == NULL)
-		create_queue(queue);
+void enqueue(tcb * thread, thread_queue queue){
+	//if(queue == NULL)
+		//create_queue(queue);
 
-	if(queue->first_node == NULL){
-		queue->first_node = thread;
-		queue->last_node = thread;
+	if(queue.size == 0){
+		queue.first_node = thread;
+		queue.last_node = thread;
 	}else{
-		queue->last_node->next_thread = thread;
-		queue->last_node = thread;
+		queue.last_node->next_thread = thread;
+		queue.last_node = thread;
 	}
-	queue->size++;
+	queue.size++;
 	
 }
 
@@ -274,17 +281,17 @@ void enqueueWait(tcb * thread, thread_queue *queue){
 	
 }
 
-tcb *dequeue(thread_queue *queue){
-	if(queue->first_node == NULL){
+tcb *dequeue(thread_queue queue){
+	if(queue.first_node == NULL){
 		return NULL;
 	}
-	tcb *temp = queue->first_node;
-	queue->first_node = queue->first_node->next_thread;
+	tcb *temp = queue.first_node;
+	queue.first_node = queue.first_node->next_thread;
 	temp->next_thread = NULL;
-	if(queue->first_node == NULL){
-		queue->last_node = NULL;
+	if(queue.first_node == NULL){
+		queue.last_node = NULL;
 	}
-	queue->size--;
+	queue.size--;
 	return temp;
 }
 
@@ -319,9 +326,11 @@ void create_timer(){
 		printf("error calling setitimer()");
 		exit(1);
 	}
+	printf("Timer Created\n");
 }
 
 void signal_handler (int signum){
+	printf("Scheduling\n");
     schedule();
 }
 
@@ -335,8 +344,8 @@ tcb *find_thread(worker_t thread){
 	return NULL;
 }
 
-tcb *search_queue(worker_t thread, thread_queue *queue){
-	tcb * search_node = queue->first_node; 
+tcb *search_queue(worker_t thread, thread_queue queue){
+	tcb * search_node = queue.first_node; 
 
 	while(search_node != NULL){
 		if(search_node->id == thread){
