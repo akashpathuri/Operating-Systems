@@ -70,7 +70,7 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 	context->uc_stack.ss_size = STACK_SIZE;
 	context->uc_stack.ss_flags = 0;
 
-	makecontext(context,(void *)&function, 1, arg);
+	makecontext(context,(void *)function, 1, arg);
 	tcb *new_thread = (tcb*) malloc(sizeof(tcb));
 	memset(new_thread, 0, sizeof(tcb));
 	*thread = thread_count;
@@ -244,7 +244,7 @@ static void sched_rr(int level) {
 	// YOUR CODE HERE
 	//print_queue(ready_queue[level]);
 
-	if(ready_queue[level].size>2 && current_node->id == ready_queue[level].first_node->id){
+	if(ready_queue[level].size>1){
 		printf("Scheduling\n");
 		tcb *running_thread = dequeue(&ready_queue[level]);
 		running_thread->status = READY;
@@ -261,18 +261,6 @@ static void sched_rr(int level) {
 		print_queue(ready_queue[level]);
 		printf("first:%d, last:%d\n", running_thread->id, current_node->id);
 		swapcontext(running_thread->context, current_node->context);
-	}else if(ready_queue[level].size>1){
-		if(ready_queue[level].first_node->id == 0){
-			ready_queue[level].first_node->status = READY;
-			ready_queue[level] = enqueue(dequeue(&ready_queue[level]), &ready_queue[level]);
-			//enqueue(dequeue(&ready_queue[level]), &ready_queue[level]);
-		}
-		current_node = ready_queue[level].first_node;
-		current_node->status = RUNNING;
-		print_queue(ready_queue[level]);
-		printf("Thread %d\n", current_node->id);
-		//printf("first:%d, last:%d\n", running_thread->id, current_node->id);
-		setcontext(current_node->context);
 	}else{
 		printf("Not Scheduling %d\n", ready_queue[level].size);
 	}

@@ -12,7 +12,7 @@
  * This will not be graded.
  */
 int x = 0;
-int loop = 10;
+int loop = 1000;
   
 void delay(int number_of_seconds){
 	// Converting time into milli_seconds
@@ -37,8 +37,7 @@ void *inc_shared_counter(void *arg) {
 		y++;
         printf("x is incremented to %d\n", x);
     }
-	printf("x is incremented to %d\n", y);
-    return NULL;
+	//printf("x is incremented to %d\n", y);
 	worker_exit(NULL);
 }
 
@@ -46,9 +45,9 @@ void *inc_shared_counter(void *arg) {
 int main(int argc, char **argv) {
 
 	/* Implement HERE */
-	printf("Going to run two threads to increment x up to %d\n", 2 * loop);
+	int threads = 2;
+	printf("Going to run two threads to increment x up to %d\n", threads * loop);
 
-	int threads = 1;
 	worker_t tid[threads];
     for (int i = 0; i < threads; i++) {
         worker_create(&tid[i], NULL, inc_shared_counter, NULL);
