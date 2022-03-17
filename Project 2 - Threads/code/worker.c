@@ -15,7 +15,8 @@ struct itimerval it_val;
 thread_queue ready_queue[PRIORITY_LEVELS];
 
 tcb *current_node;
-//ucontext_t *scheduler_context; //remove if not used
+//tcb *main_thread; 
+tcb *scheduler; //remove if not used
 
 int worker_create(worker_t * thread, pthread_attr_t * attr, 
                       void *(*function)(void*), void * arg) {
@@ -26,69 +27,108 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
        // - after everything is set, push this thread into run queue and 
        // - make it ready for the execution.
 
-	
+	printf("At create\n");
 	if(thread_count == 0){
-		ucontext_t *main_context = (ucontext_t*)malloc(sizeof(ucontext_t));
-		getcontext(main_context);
-		tcb *main_thread = (tcb*) malloc(sizeof(tcb));
-		memset(main_thread, 0, sizeof(tcb));
-		main_thread->id = 0;
-		main_thread->context = main_context;
-		main_thread->status = RUNNING;
-		main_thread->priority = 0;
-		main_thread->next_thread = NULL;
-		//initilize ready queue...........
 		
-		for(int x = 0; x<PRIORITY_LEVELS; x++){
-			//create_queue(ready_queue[x]);
-			memset(&ready_queue[x], 0, sizeof(thread_queue));
-			ready_queue[x].size = 0;
+		// ucontext_t *main_context = NULL;
+		// main_context = (ucontext_t*)malloc(sizeof(ucontext_t));
+
+        // if (getcontext(main_context) == -1){
+        //     perror("getcontext: could not get parent context\n");
+        //     exit(1);
+        // }
+		ucontext_t main_context;
+		
+		if(thread_count == 0){
+			ucontext_t new_context;
+			//ucontext_t* context = {0};
+			if (getcontext(&new_context) == -1){
+				perror("getcontext: could not get parent context\n");
+				exit(1);
+			}
+			new_context.uc_link = 0;
+			new_context.uc_stack.ss_sp = malloc(STACK_SIZE);
+			new_context.uc_stack.ss_size = STACK_SIZE;
+			new_context.uc_stack.ss_flags = 0;
+			if(new_context.uc_stack.ss_sp == 0){
+				perror("malloc: could not allocate stack");
+				return -1;
+			}//remove if not used
+			makecontext(&new_context,(void *)function, 1, arg);
+			tcb *new_thread = (tcb*) malloc(sizeof(tcb));
+			//memset(new_thread, 0, sizeof(tcb));
+			*thread = thread_count;
+			new_thread->id = ++thread_count;
+			new_thread->context = &new_context;
+			new_thread->status = READY;
+			new_thread->priority = 0;
+			new_thread->next_thread = NULL; 
+
+			tcb *main_thread = (tcb*) malloc(sizeof(tcb));
+			//memset(main_thread, 0, sizeof(tcb));
+			main_thread->id = 0;
+			main_thread->context = &main_context;
+			main_thread->status = RUNNING;
+			main_thread->priority = 0;
+			main_thread->next_thread = NULL;
+		
+
+			//initilize ready queue...........
+			for(int x = 0; x<PRIORITY_LEVELS; x++){
+				//create_queue(ready_queue[x]);
+				//memset(&ready_queue[x], 0, sizeof(thread_queue));
+				ready_queue[x].size = 0;
+			}
+			current_node = main_thread;
+			ready_queue[0] = enqueue(main_thread, &ready_queue[0]);
+			ready_queue[0] = enqueue(new_thread, &ready_queue[0]);
+			printf("Thread %d \n", ready_queue[0].last_node->id);
+			//swapcontext(&main_context, &new_context);
+			create_timer();
+			schedule();
 		}
 
-
-		/*thread_node *main_thread_node = (thread_node*) malloc(sizeof(thread_node));
-		main_thread_node->thread_tcb = main_thread;
-		main_thread_node->next_thread = NULL;*/ //remove if not used
-		current_node = main_thread;
-		ready_queue[0] = enqueue(main_thread, &ready_queue[0]);
-		//ready_queue[0] = enqueue(new_thread, &ready_queue[0]);
-		//enqueue(main_thread, &ready_queue[0]);
-		//enqueue(new_thread, &ready_queue[0]);
-
-		//create_schedule_context();
-		//create_timer();
-		//setcontext(main_context);
-		//printf("Setting Context\n");
-		//schedule();
+	}else{
+		ucontext_t *context = (ucontext_t*)malloc(sizeof(ucontext_t));
+		//ucontext_t* context = {0};
+		if (getcontext(context) == -1){
+			perror("getcontext: could not get parent context\n");
+			exit(1);
+		}
+		context->uc_link = 0;
+		context->uc_stack.ss_sp = malloc(STACK_SIZE);
+		context->uc_stack.ss_size = STACK_SIZE;
+		context->uc_stack.ss_flags = 0;
+		if(context->uc_stack.ss_sp == 0){
+			perror("malloc: could not allocate stack");
+			return -1;
+		}//remove if not used
+		
+		makecontext(context,(void *)function, 1, arg);
+		tcb *new_thread = (tcb*) malloc(sizeof(tcb));
+		memset(new_thread, 0, sizeof(tcb));
+		*thread = thread_count;
+		new_thread->id = thread_count++;
+		new_thread->context = context;
+		new_thread->status = READY;
+		new_thread->priority = 0;
+		new_thread->next_thread = NULL; 
+		ready_queue[0] = enqueue(new_thread, &ready_queue[0]);
 	}
 
-	thread_count++;
-	ucontext_t *context = (ucontext_t*)malloc(sizeof(ucontext_t));
-	getcontext(context);
-	context->uc_link = NULL;
-	context->uc_stack.ss_sp = malloc(STACK_SIZE);;
-	context->uc_stack.ss_size = STACK_SIZE;
-	context->uc_stack.ss_flags = 0;
-
-	makecontext(context,(void *)&function, 1, arg);
-	tcb *new_thread = (tcb*) malloc(sizeof(tcb));
-	memset(new_thread, 0, sizeof(tcb));
-	*thread = thread_count;
-	new_thread->id = thread_count;
-	new_thread->context = context;
-	new_thread->status = READY;
-	new_thread->priority = 0;
-	new_thread->next_thread = NULL;  
 	
-	ready_queue[0] = enqueue(new_thread, &ready_queue[0]);
+
 	
-	if(thread_count == 1){
-		create_timer();
-		schedule();
-	}
+	// if(thread_count == 1){
+	// 	//getcontext(ready_queue[0].first_node->context);
+	// 	create_timer();
+	// 	//setcontext(&(ready_queue[0].first_node->next_thread->context));
+	// 	schedule();
+	// 	//swapcontext(&ready_queue[0].first_node->context, &context);
+	// }
 
 
-	printf("Thread %d \n", new_thread->id);
+	//printf("Thread %d \n", new_thread->id);
 
     return 0;
 };
@@ -130,7 +170,7 @@ void worker_exit(void *value_ptr) {
 	// traverse the thread queue to find the current_node ID in any of the elements' waiting queue list of the tcb. 
 	
 	dequeue(&ready_queue[current_node->priority]);
-
+    
 	if(current_node->waiting_queue !=NULL){
 		tcb * search_node = current_node->waiting_queue->first_node; 
 		while(search_node != NULL){
@@ -224,7 +264,9 @@ static void schedule() {
 
 
 	// YOUR CODE HERE
+
 	sched_rr(0);
+	
 	// - schedule policy
 //	#ifndef MLFQ
 		// Choose RR
@@ -243,8 +285,8 @@ static void sched_rr(int level) {
 
 	// YOUR CODE HERE
 	//print_queue(ready_queue[level]);
-
-	if(ready_queue[level].size>2 && current_node->id == ready_queue[level].first_node->id){
+	printf("Loop from beginning\n");
+	if(ready_queue[level].size>1 && current_node->id == ready_queue[level].first_node->id){
 		printf("Scheduling\n");
 		tcb *running_thread = dequeue(&ready_queue[level]);
 		running_thread->status = READY;
@@ -259,9 +301,11 @@ static void sched_rr(int level) {
 		current_node = ready_queue[level].first_node;
 		current_node->status = RUNNING;
 		print_queue(ready_queue[level]);
-		printf("first:%d, last:%d\n", running_thread->id, current_node->id);
+		printf("running:%d, current:%d\n", running_thread->id, current_node->id);
 		swapcontext(running_thread->context, current_node->context);
-	}else if(ready_queue[level].size>1){
+		//setcontext(ready_queue[level].first_node->context);
+
+	}else if(ready_queue[level].size>0){
 		if(ready_queue[level].first_node->id == 0){
 			ready_queue[level].first_node->status = READY;
 			ready_queue[level] = enqueue(dequeue(&ready_queue[level]), &ready_queue[level]);
@@ -287,6 +331,10 @@ static void sched_mlfq() {
 	// (feel free to modify arguments and return types)
 
 	// YOUR CODE HERE
+
+
+
+
 }
 
 // Feel free to add any other functions you need
@@ -347,13 +395,21 @@ void create_queue(thread_queue* queue) {
 }
 
 void create_schedule_context() {
-	// scheduler_context = (ucontext_t*) malloc(sizeof(ucontext_t));
-	// scheduler_context->uc_link = NULL;
-	// scheduler_context->uc_stack.ss_sp = malloc(STACK_SIZE);
-	// scheduler_context->uc_stack.ss_size = STACK_SIZE;
-	// scheduler_context->uc_stack.ss_flags = 0;
+	// ucontext_t scheduler_context = {0};
+	// getcontext(&scheduler_context);
+		
+	// scheduler_context.uc_stack.ss_sp = malloc(STACK_SIZE);
+	// scheduler_context.uc_stack.ss_size = STACK_SIZE;
+	// scheduler_context.uc_link = NULL;
 
-	// makecontext(scheduler_context, &schedule, 1, NULL);
+	// scheduler = malloc(sizeof(tcb));
+	// memset(scheduler, 0, sizeof(tcb));
+	// scheduler->id = 0;
+	// scheduler->status = READY;
+	// scheduler->context = scheduler_context;
+
+	// makecontext(&scheduler->context, schedule, 0);
+
 }
 
 void create_timer(){
@@ -374,6 +430,7 @@ void create_timer(){
 }
 
 void signal_handler (int signum){
+	printf("Time Schedule\n");
     schedule();
 }
 

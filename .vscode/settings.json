@@ -2,6 +2,7 @@
 	"files.associations": {
 		"worker.h": "c",
 		"string.h": "c",
-		"thread": "c"
+		"thread": "c",
+		"errno.h": "c"
 	}
 }

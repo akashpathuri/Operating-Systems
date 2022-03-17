@@ -11,7 +11,7 @@
 #define READY 1
 #define BLOCKED 2
 #define WAITING 3
-#define STACK_SIZE SIGSTKSZ
+#define STACK_SIZE 1024*64
 #define INTERVAL 20
 
 
@@ -32,7 +32,6 @@
 #include <signal.h>
 #include <sys/time.h>
 #include <errno.h>
-
 typedef uint worker_t;
 
 typedef struct TCB {

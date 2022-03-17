@@ -101,7 +101,7 @@ int my_pthread_create( my_pthread_t * thread, my_pthread_attr_t * attr, void *(*
             parentNode->mythread = parentThread;
             parentNode->next = NULL;
 
-            
+            //initializes ready queues
             initializeScheduler();
 
             //printf("adding parent and child to ready queue\n");
