@@ -134,7 +134,7 @@ static void schedule();
 static void sched_rr();
 static void sched_mlfq();
 
-void enqueue(tcb *thread, thread_queue *queue);
+thread_queue enqueue(tcb *thread, thread_queue *queue);
 void enqueueWait(tcb * thread, thread_queue *queue);
 tcb *dequeue(thread_queue *queue);
 void create_schedule_context();
@@ -143,5 +143,6 @@ void create_timer();
 void signal_handler (int signum);
 tcb *find_thread(worker_t thread);
 tcb *search_queue(worker_t thread, thread_queue *queue);
+void print_queue(thread_queue queue);
 
 #endif

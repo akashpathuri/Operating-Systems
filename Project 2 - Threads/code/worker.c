@@ -26,30 +26,10 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
        // - after everything is set, push this thread into run queue and 
        // - make it ready for the execution.
 
-	thread_count++;
-	ucontext_t *context = (ucontext_t*)malloc(sizeof(ucontext_t));
-
-	context->uc_link = NULL;
-	context->uc_stack.ss_sp = malloc(STACK_SIZE);;
-	context->uc_stack.ss_size = STACK_SIZE;
-	context->uc_stack.ss_flags = 0;
-
-	makecontext(context,(void *)&function, 1, arg);
-	tcb *new_thread = (tcb*) malloc(sizeof(tcb));
-	memset(new_thread, 0, sizeof(tcb));
-	*thread = thread_count;
-	new_thread->id = thread_count;
-	new_thread->context = context;
-	new_thread->status = READY;
-	new_thread->priority = 0;
-	new_thread->next_thread = NULL;  
-	/*thread_node *new_thread_node = (thread_node*) malloc(sizeof(thread_node));
-	new_thread_node->thread_tcb = new_thread;
-	new_thread_node->next_thread = NULL;*/  //remove if not used
 	
-
-	if(thread_count == 1){
+	if(thread_count == 0){
 		ucontext_t *main_context = (ucontext_t*)malloc(sizeof(ucontext_t));
+		getcontext(main_context);
 		tcb *main_thread = (tcb*) malloc(sizeof(tcb));
 		memset(main_thread, 0, sizeof(tcb));
 		main_thread->id = 0;
@@ -70,19 +50,45 @@ int worker_create(worker_t * thread, pthread_attr_t * attr,
 		main_thread_node->thread_tcb = main_thread;
 		main_thread_node->next_thread = NULL;*/ //remove if not used
 		current_node = main_thread;
-		//ready_queue[0] = enqueue(main_thread, ready_queue[0]);
-		//ready_queue[0] = enqueue(new_thread, ready_queue[0]);
-		enqueue(main_thread, &ready_queue[0]);
-		enqueue(new_thread, &ready_queue[0]);
+		ready_queue[0] = enqueue(main_thread, &ready_queue[0]);
+		//ready_queue[0] = enqueue(new_thread, &ready_queue[0]);
+		//enqueue(main_thread, &ready_queue[0]);
+		//enqueue(new_thread, &ready_queue[0]);
 
 		//create_schedule_context();
+		//create_timer();
+		//setcontext(main_context);
+		//printf("Setting Context\n");
+		//schedule();
+	}
+
+	thread_count++;
+	ucontext_t *context = (ucontext_t*)malloc(sizeof(ucontext_t));
+	getcontext(context);
+	context->uc_link = NULL;
+	context->uc_stack.ss_sp = malloc(STACK_SIZE);;
+	context->uc_stack.ss_size = STACK_SIZE;
+	context->uc_stack.ss_flags = 0;
+
+	makecontext(context,(void *)&function, 1, arg);
+	tcb *new_thread = (tcb*) malloc(sizeof(tcb));
+	memset(new_thread, 0, sizeof(tcb));
+	*thread = thread_count;
+	new_thread->id = thread_count;
+	new_thread->context = context;
+	new_thread->status = READY;
+	new_thread->priority = 0;
+	new_thread->next_thread = NULL;  
+	
+	ready_queue[0] = enqueue(new_thread, &ready_queue[0]);
+	
+	if(thread_count == 1){
 		create_timer();
 		schedule();
-	}else{
-		//ready_queue[0] = enqueue(new_thread, ready_queue[0]);
-		enqueue(new_thread, &ready_queue[0]);
 	}
-		printf("Thread %d \n", new_thread->id);
+
+
+	printf("Thread %d \n", new_thread->id);
 
     return 0;
 };
@@ -236,19 +242,37 @@ static void sched_rr(int level) {
 	// (feel free to modify arguments and return types)
 
 	// YOUR CODE HERE
-	if(ready_queue[level].size>1 && current_node->id == ready_queue[level].first_node->id){
+	//print_queue(ready_queue[level]);
+
+	if(ready_queue[level].size>2 && current_node->id == ready_queue[level].first_node->id){
 		printf("Scheduling\n");
 		tcb *running_thread = dequeue(&ready_queue[level]);
 		running_thread->status = READY;
-		//ready_queue[level] = enqueue(running_thread, ready_queue[level]);
-		enqueue(running_thread, &ready_queue[level]);
+		ready_queue[level] = enqueue(running_thread, &ready_queue[level]);
+		print_queue(ready_queue[level]);
+		//enqueue(running_thread, &ready_queue[level]);
+		//while(ready_queue[level].first_node->status != READY || ready_queue[level].first_node->id == 0){
 		while(ready_queue[level].first_node->status != READY){
-			//ready_queue[level] = enqueue(dequeue(ready_queue[level]), ready_queue[level]);
-			enqueue(dequeue(&ready_queue[level]), &ready_queue[level]);
+			ready_queue[level] = enqueue(dequeue(&ready_queue[level]), &ready_queue[level]);
+			//enqueue(dequeue(&ready_queue[level]), &ready_queue[level]);
 		}
 		current_node = ready_queue[level].first_node;
 		current_node->status = RUNNING;
+		print_queue(ready_queue[level]);
+		printf("first:%d, last:%d\n", running_thread->id, current_node->id);
 		swapcontext(running_thread->context, current_node->context);
+	}else if(ready_queue[level].size>1){
+		if(ready_queue[level].first_node->id == 0){
+			ready_queue[level].first_node->status = READY;
+			ready_queue[level] = enqueue(dequeue(&ready_queue[level]), &ready_queue[level]);
+			//enqueue(dequeue(&ready_queue[level]), &ready_queue[level]);
+		}
+		current_node = ready_queue[level].first_node;
+		current_node->status = RUNNING;
+		print_queue(ready_queue[level]);
+		printf("Thread %d\n", current_node->id);
+		//printf("first:%d, last:%d\n", running_thread->id, current_node->id);
+		setcontext(current_node->context);
 	}else{
 		printf("Not Scheduling %d\n", ready_queue[level].size);
 	}
@@ -266,20 +290,22 @@ static void sched_mlfq() {
 }
 
 // Feel free to add any other functions you need
-void enqueue(tcb * thread, thread_queue *queue){
+thread_queue enqueue(tcb * thread, thread_queue *queue){
 	//if(queue == NULL)
 		//create_queue(queue);
 
 	if(queue->size == 0){
 		queue->first_node = thread;
-		queue->last_node = thread;
+		queue->last_node = queue->first_node;
 	}else{
 		queue->last_node->next_thread = thread;
-		queue->last_node = thread;
+		queue->last_node = queue->last_node->next_thread;
 	}
-	queue->size++;
-	//return queue;
-	
+	printf("first:%d, last:%d\t", queue->first_node->id, queue->last_node->id);
+	queue->size = queue->size + 1;
+	print_queue(*queue);
+
+	return *queue;
 }
 
 
@@ -344,7 +370,7 @@ void create_timer(){
 		printf("error calling setitimer()");
 		exit(1);
 	}
-	printf("Timer Created\n");
+	//printf("Timer Created\n");
 }
 
 void signal_handler (int signum){
@@ -371,4 +397,14 @@ tcb *search_queue(worker_t thread, thread_queue *queue){
 		search_node = search_node->next_thread;
 	}
 	return NULL;
+}
+void print_queue(thread_queue queue){
+	tcb *search_node = queue.first_node;
+
+	while(search_node != NULL){
+		printf("%d -> ",search_node->id);
+		search_node = search_node->next_thread;
+	}
+	printf("end   size:%d\n",queue.size);
+
 }
