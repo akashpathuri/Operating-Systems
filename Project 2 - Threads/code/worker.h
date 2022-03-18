@@ -51,8 +51,8 @@ typedef struct TCB {
 	int elapsed_counter;
 	void *return_ptr; //stack pointer
 	struct TCB *next_thread;
-	struct TCB *next_waiting_thread;
-	struct thread_queue *waiting_queue;
+	//struct TCB *next_waiting_thread;
+	//struct thread_queue *waiting_queue;
 	/*
 	mypthread_t thread_id;
     State state;
@@ -134,9 +134,7 @@ static void sched_rr();
 static void sched_mlfq();
 
 thread_queue enqueue(tcb *thread, thread_queue *queue);
-void enqueueWait(tcb * thread, thread_queue *queue);
 tcb *dequeue(thread_queue *queue);
-void create_schedule_context();
 void create_queue(thread_queue *queue);
 void create_timer();
 void signal_handler (int signum);

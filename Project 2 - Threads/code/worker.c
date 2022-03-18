@@ -26,8 +26,7 @@ int worker_create(worker_t * thread, pthread_attr_t * attr, void *(*function)(vo
 	// - make it ready for the execution.
 	if(thread_count == 0){
 		ucontext_t main_context;
-		//getcontext(&main_context);
-		
+
 		main_thread = (tcb*) malloc(sizeof(tcb));
 		memset(main_thread, 0, sizeof(tcb));
 		main_thread->id = 0;
@@ -66,7 +65,6 @@ int worker_create(worker_t * thread, pthread_attr_t * attr, void *(*function)(vo
 	if(DEBUG)
 		printf("Creating Thread: %d\n", ready_queue[0].last_node->id);
 	
-	
 	if(thread_count == 1){
 		getcontext(main_thread->context);
 		if(thread_count == 1){
@@ -74,8 +72,6 @@ int worker_create(worker_t * thread, pthread_attr_t * attr, void *(*function)(vo
 			schedule();
 		}
 	}
-	
-	
     return 0;
 };
 
@@ -86,12 +82,7 @@ int worker_yield() {
 	// - save context of this thread to its thread control block
 	// - switch from thread context to scheduler context
 
-	// YOUR CODE HERE
-	//schedule();
-	//current_node->status = READY;
-	//enqueue(dequeue(ready_queue[current_node->priority]), ready_queue[current_node->priority]);
 	schedule();
-	//swapcontext(current_node->context, current_node->next_thread->context);
 
 	return 0;
 };
@@ -100,11 +91,8 @@ int worker_yield() {
 void worker_exit(void *value_ptr) {
 	// - de-allocate any dynamic memory created when starting this thread
 
-	// YOUR CODE HERE
 	if (current_node->id == 0){
         printf("parent called exit\n");
-		//return;
-        //exit(1);
     }else{
 		if(DEBUG)
 			printf("Exiting %d\n", current_node->id);
@@ -123,17 +111,6 @@ void worker_exit(void *value_ptr) {
 			main_thread->status = READY;
 		}
 
-		// if(current_node->waiting_queue !=NULL){
-		// 	tcb * search_node = current_node->waiting_queue->first_node; 
-		// 	while(search_node != NULL){
-		// 		if(search_node->join_on == current_node->id)
-		// 			search_node->status = READY;
-		// 		tcb * next_node = search_node->next_waiting_thread;
-		// 		search_node->next_waiting_thread = NULL;
-		// 		search_node = next_node;
-		// 	}
-		// 	free(current_node->waiting_queue);
-		// }
 		free(current_node->context->uc_stack.ss_sp);
 		free(current_node);
 		thread_exiting = 1;
@@ -148,17 +125,10 @@ int worker_join(worker_t thread, void **value_ptr) {
 	// - wait for a specific thread to terminate
 	// - de-allocate any dynamic memory created by the joining thread
   
-	// YOUR CODE HERE
-	// if (thread > thread_count){ //remove if not used
-	// 	return ESRCH;
-	// }
 	if(DEBUG)
 		printf("Joining %d with %d\n", current_node->id, thread);
 
-
-	
 	tcb *wait_on = find_thread(thread);
-	
 	if(wait_on == NULL){
 		if(DEBUG)
 			printf("Thread Found %d\n", thread);
@@ -169,7 +139,6 @@ int worker_join(worker_t thread, void **value_ptr) {
 	}
 	current_node->join_on = thread;
 	current_node->status = WAITING;	
-	//enqueueWait(current_node, wait_on->waiting_queue);
 	thread_joining = 1;
 	schedule();
 	if(DEBUG) 
@@ -266,19 +235,15 @@ static void schedule() {
 	// schedule() function
 
 	// - invoke scheduling algorithms according to the policy (RR or MLFQ)
-
-
-
-	// YOUR CODE HERE
-	sched_rr(0);
+	
 	// - schedule policy
-//	#ifndef MLFQ
-		// Choose RR
-		
-//	#else 
-		// Choose MLFQ
-//		sched_mlfq();
-//	#endif
+	#ifndef MLFQ
+		//Choose RR
+		sched_rr(0);
+	#else 
+		//Choose MLFQ
+		sched_mlfq();
+	#endif
 
 }
 
@@ -287,7 +252,6 @@ static void sched_rr(int level) {
 	// - your own implementation of RR
 	// (feel free to modify arguments and return types)
 
-	// YOUR CODE HERE
 	if (thread_joining){
 		thread_joining = 0;
 		if(DEBUG)
@@ -336,22 +300,15 @@ static void sched_rr(int level) {
 static void sched_mlfq(int level) {
 	// - your own implementation of MLFQ
 	// (feel free to modify arguments and return types)
-
-	// YOUR CODE HERE
-
-	/*
-		Rule 1: If Priority(A) > Priority(B), A runs (B doesn’t).
+	/*	Rule 1: If Priority(A) > Priority(B), A runs (B doesn’t).
 		Rule 2: If Priority(A) = Priority(B), A & B run in RR.
 		Rule 3: When a job enters the system, it is placed at the highest priority (the topmost queue).
 		Rule 4a: If a job uses up an entire time slice while running, its priority is reduced (i.e., it moves down one queue).
 		Rule 4b: If a job gives up the CPU before the time slice is up, it stays at the same priority level.
-		Rule 5: After some time period S, move all the jobs in the system to the topmost queue
-	*/
+		Rule 5: After some time period S, move all the jobs in the system to the topmost queue*/
 
-
-
-
-	
+	// YOUR CODE HERE
+	printf("Scheduling MLFQ\n");
 }
 
 // Feel free to add any other functions you need
@@ -373,27 +330,6 @@ thread_queue enqueue(tcb * thread, thread_queue *queue){
 	}
 
 	return *queue;
-}
-
-
-void enqueueWait(tcb * thread, thread_queue *queue){
-	if(queue == NULL)
-		create_queue(queue);
-	if(DEBUG) 
-		printf("Making queue with %d\n", thread->id);
-	if(queue->first_node == NULL){
-		queue->first_node = thread;
-		queue->last_node = thread;
-	}else{
-		queue->last_node->next_waiting_thread = thread;
-		queue->last_node = thread;
-	}
-	queue->size++;
-	if(DEBUG){
-		printf("Past creation of wait queue or addition of element\n");
-		print_queue(*queue);
-	}
-	
 }
 
 tcb *dequeue(thread_queue *queue){
@@ -418,16 +354,6 @@ void create_queue(thread_queue* queue) {
 	queue->size = 0;
 }
 
-void create_schedule_context() {
-	// scheduler_context = (ucontext_t*) malloc(sizeof(ucontext_t));
-	// scheduler_context->uc_link = NULL;
-	// scheduler_context->uc_stack.ss_sp = malloc(STACK_SIZE);
-	// scheduler_context->uc_stack.ss_size = STACK_SIZE;
-	// scheduler_context->uc_stack.ss_flags = 0;
-
-	// makecontext(scheduler_context, &schedule, 1, NULL);
-}
-
 void create_timer(){
 	if (signal(SIGALRM, (void (*)(int)) signal_handler) == SIG_ERR) {
 		printf("Unable to catch SIGALRM\n");
@@ -442,7 +368,8 @@ void create_timer(){
 		printf("error calling setitimer()\n");
 		exit(1);
 	}
-	//printf("Timer Created\n");
+	if(DEBUG)
+		printf("Timer Created\n");
 }
 
 void signal_handler (int signum){
