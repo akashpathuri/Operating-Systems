@@ -92,7 +92,7 @@ void verify() {
 
 
 void sig_handler(int signum) {
-	//printf("%d\n", signum);
+	printf("%d\n", signum);
 }
 
 

@@ -69,11 +69,10 @@ typedef struct TCB {
 /* mutex struct definition */
 typedef struct worker_mutex_t {
 	/* add something here */
-	//int init;
-    //volatile int lock;
-    //volatile int queueLock;
-    //thread_queue * waitQueue;
-	// YOUR CODE HERE
+	// worker_mutex_t mutex_id;
+    // volatile int value; //0 or 1, 0 being unlocked, 1 being locked
+    // tcb* mutex_parent; 
+    // thread_queue* queue;
 } worker_mutex_t;
 
 

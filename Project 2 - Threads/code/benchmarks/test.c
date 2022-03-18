@@ -12,32 +12,21 @@
  * This will not be graded.
  */
 int x = 0;
-int loop = 1000;
+int loop = 50000;
   
 void delay(int number_of_seconds){
-	// Converting time into milli_seconds
 	int milli_seconds = 1000000 * number_of_seconds;
-
-	// Storing start time
 	clock_t start_time = clock();
 
-	// looping till required time is not achieved
-	while (clock() < start_time + milli_seconds){
-		//printf("looping ");
-	};
-
+	while (clock() < start_time + milli_seconds);
 }
 
 
 void *inc_shared_counter(void *arg) {
-	int y = 0;
     for(int i = 0; i < loop; i++){
-        /* Implement Code Here */
         x++;
-		y++;
-        printf("x is incremented to %d\n", x);
     }
-	//printf("x is incremented to %d\n", y);
+	printf("x is incremented to %d\n", x);
 	worker_exit(NULL);
 }
 
