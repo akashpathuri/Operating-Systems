@@ -129,6 +129,6 @@ void signal_handler (int signum);
 tcb *find_thread(worker_t thread);
 tcb *search_queue(worker_t thread, thread_queue *queue);
 void print_queue(thread_queue queue);
-static void set_thread(tcb *running_thread, int levelgiven);
+static void set_next_thread(tcb *running_thread);
 
 #endif

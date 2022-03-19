@@ -366,10 +366,10 @@ static void sched_mlfq() {
 	// RULE 1 and 2
 	if(thread_joining){
 		thread_joining = 0;
-		set_thread(main_thread, 0);
+		set_next_thread(main_thread);
 	}else if (thread_exiting){
 		thread_exiting = 0;
-		set_thread(NULL, 0);
+		set_next_thread(NULL);
 	}else if(timer_interrupt && current_node->id ==previous_node){ //RULE 4
 		if(DEBUG ==4)
 			printf("Timer Interrupt after same node %d\n", current_node->id);
@@ -389,7 +389,7 @@ static void sched_mlfq() {
 				print_queue(ready_queue[p]);
 			}
 		}
-		set_thread(running_node,0);
+		set_next_thread(running_node);
 	}else{
 		if(DEBUG ==4)
 			printf("Switching Node\n");
@@ -399,12 +399,12 @@ static void sched_mlfq() {
 		}else{
 			enqueue(dequeue(&ready_queue[current_node->priority]),&ready_queue[current_node->priority]);
 		}
-		set_thread(current_node, 0);
+		set_next_thread(current_node);
 	}
 	//RULE 3 performed in Worker_Create
 
 }
-static void set_thread(tcb *running_thread, int levelgiven){
+static void set_next_thread(tcb *running_thread){
 	int level;
 	for(level = 0; level<PRIORITY_LEVELS; level++){
 		if(ready_queue[level].size > 0){
