@@ -5,15 +5,18 @@
 // iLab Server: ilab4.cs.rutgers.edu
 #include "worker.h"
 
-#define DEBUG 0
+#define DEBUG 0 
 
 int thread_count = 0;
 int thread_exiting = 0;
 int thread_joining = 0;
+int thread_yielding = 0;
+int timer_interrupt = 0;
+int previous_node = 0;
 struct itimerval it_val;
+int mlfq_counter = 0;
 
 thread_queue ready_queue[PRIORITY_LEVELS];
-
 tcb *current_node;
 tcb *main_thread;
 //ucontext_t *scheduler_context; //remove if not used
@@ -81,7 +84,7 @@ int worker_yield() {
 	// - change worker thread's state from Running to Ready
 	// - save context of this thread to its thread control block
 	// - switch from thread context to scheduler context
-
+	thread_yielding = 1;
 	schedule();
 
 	return 0;
@@ -103,21 +106,23 @@ void worker_exit(void *value_ptr) {
 		
 		// traverse the thread queue to find the current_node ID in any of the elements' waiting queue list of the tcb. 
 		dequeue(&ready_queue[current_node->priority]);
-		if(DEBUG)
+		if(DEBUG){
 			printf("Main Thread Waiting %d\n", main_thread->join_on);
+			
+		}
 		if(main_thread->join_on == current_node->id){
 			if(DEBUG)
 				printf("Main Thread Ready %d\n", main_thread->join_on);
 			main_thread->status = READY;
 		}
-
+		if(DEBUG)
+			printf("Main Thread Status %d\n", main_thread->status);
 		free(current_node->context->uc_stack.ss_sp);
 		free(current_node);
 		thread_exiting = 1;
 		schedule();
 	}
 };
-
 
 /* Wait for thread termination */
 int worker_join(worker_t thread, void **value_ptr) {
@@ -131,11 +136,11 @@ int worker_join(worker_t thread, void **value_ptr) {
 	tcb *wait_on = find_thread(thread);
 	if(wait_on == NULL){
 		if(DEBUG)
-			printf("Thread Found %d\n", thread);
+			printf("Thread Not Found %d\n", thread);
 		return 0;
 	}else{
 		if(DEBUG)
-			printf("Thread Not Found %d\n", thread);
+			printf("Thread Found %d\n", thread);
 	}
 	current_node->join_on = thread;
 	current_node->status = WAITING;	
@@ -238,10 +243,8 @@ static void schedule() {
 	
 	// - schedule policy
 	#ifndef MLFQ
-		//Choose RR
 		sched_rr(0);
 	#else 
-		//Choose MLFQ
 		sched_mlfq();
 	#endif
 
@@ -281,23 +284,33 @@ static void sched_rr(int level) {
 		if(running_thread->status == RUNNING)
 			running_thread->status = READY;
 		ready_queue[level] = enqueue(running_thread, &ready_queue[level]);
-	
+		if(thread_yielding) 
+			thread_yielding = 0;
 		while(ready_queue[level].first_node->status != READY){
 			ready_queue[level] = enqueue(dequeue(&ready_queue[level]), &ready_queue[level]);
 		}
 		current_node = ready_queue[level].first_node;
 		current_node->status = RUNNING;
+		if(timer_interrupt){
+			timer_interrupt = 0;
+			previous_node = current_node->id;
+		}
 		swapcontext(running_thread->context, current_node->context);
 	}else{
 		if(DEBUG){
 			print_queue(ready_queue[level]);
 			printf("Scheduling last thread (main): %d\n", ready_queue[level].size);
 		}
+		if(ready_queue[level].first_node != NULL && ready_queue[level].first_node->status == READY){
+			current_node = ready_queue[level].first_node;
+			current_node->status = RUNNING;
+			setcontext(current_node->context);
+		}
 	}
 }
 
 /* Preemptive MLFQ scheduling algorithm */
-static void sched_mlfq(int level) {
+static void sched_mlfq() {
 	// - your own implementation of MLFQ
 	// (feel free to modify arguments and return types)
 	/*	Rule 1: If Priority(A) > Priority(B), A runs (B doesn’t).
@@ -307,8 +320,135 @@ static void sched_mlfq(int level) {
 		Rule 4b: If a job gives up the CPU before the time slice is up, it stays at the same priority level.
 		Rule 5: After some time period S, move all the jobs in the system to the topmost queue*/
 
-	// YOUR CODE HERE
-	printf("Scheduling MLFQ\n");
+	//RULE 4
+	// if(timer_interrupt && current_node->id ==previous_node){
+	// 	mlfq_counter++;
+	// 	tcb *running_node = current_node;
+	// 	if(current_node->priority <PRIORITY_LEVELS-1){
+	// 		enqueue(dequeue(&ready_queue[current_node->priority]),&ready_queue[current_node->priority+1]);
+	// 	}
+	// 	set_thread(running_node, 0);
+	// }
+
+
+	//RULE 5
+	int level;
+	mlfq_counter++;
+	if(mlfq_counter >=10 && !thread_exiting && !thread_joining){
+		mlfq_counter = 0;
+		if(DEBUG == 4){
+			printf("Reseting MLFQ Priorities\n");
+			for(int p = 0; p<PRIORITY_LEVELS; p++){
+				print_queue(ready_queue[p]);
+			}
+		}
+		for(level = 1; level<PRIORITY_LEVELS; level++){
+			while(ready_queue[level].size > 0){
+				if(DEBUG == 4)
+					printf("Shifting %d to %d\t", level, 0);
+				if(ready_queue[level].first_node->id == current_node->id){
+					dequeue(&ready_queue[level]);
+					current_node->next_thread = NULL;
+				}else{
+					ready_queue[level].first_node->priority = 0;
+					enqueue(dequeue(&ready_queue[level]),&ready_queue[0]);	
+				}
+			}
+		}
+		if(DEBUG == 4){
+			printf("Reseting MLFQ Priorities\n");
+			for(int p = 0; p<PRIORITY_LEVELS; p++){
+				print_queue(ready_queue[p]);
+			}
+		}
+	}
+
+	// RULE 1 and 2
+	if(thread_joining){
+		thread_joining = 0;
+		set_thread(main_thread, 0);
+	}else if (thread_exiting){
+		thread_exiting = 0;
+		set_thread(NULL, 0);
+	}else if(timer_interrupt && current_node->id ==previous_node){ //RULE 4
+		if(DEBUG ==4)
+			printf("Timer Interrupt after same node %d\n", current_node->id);
+		tcb *running_node = current_node;
+		if(mlfq_counter==0 && current_node->priority>0){
+			enqueue(current_node, &ready_queue[1]);
+			current_node->priority = 1;
+		}else if(current_node->priority <PRIORITY_LEVELS-1){
+			enqueue(dequeue(&ready_queue[current_node->priority]),&ready_queue[current_node->priority+1]);
+			current_node->priority++;
+		}else{
+			enqueue(dequeue(&ready_queue[current_node->priority]),&ready_queue[current_node->priority]);
+		}
+		if(DEBUG == 4){
+			printf("Reseting MLFQ Priorities\n");
+			for(int p = 0; p<PRIORITY_LEVELS; p++){
+				print_queue(ready_queue[p]);
+			}
+		}
+		set_thread(running_node,0);
+	}else{
+		if(DEBUG ==4)
+			printf("Switching Node\n");
+		tcb *running_node = current_node;
+		if(mlfq_counter==0 && current_node->priority>0){
+			enqueue(current_node, &ready_queue[current_node->priority]);
+		}else{
+			enqueue(dequeue(&ready_queue[current_node->priority]),&ready_queue[current_node->priority]);
+		}
+		set_thread(current_node, 0);
+	}
+	//RULE 3 performed in Worker_Create
+
+}
+static void set_thread(tcb *running_thread, int levelgiven){
+	int level;
+	for(level = 0; level<PRIORITY_LEVELS; level++){
+		if(ready_queue[level].size > 0){
+			int s = ready_queue[level].size;
+			if (DEBUG==4)
+				printf("Searching MLFQ %d -> ",ready_queue[level].first_node->id);
+			while(ready_queue[level].first_node->status != READY && s>=0){
+				ready_queue[level] = enqueue(dequeue(&ready_queue[level]), &ready_queue[level]);
+				if(DEBUG)
+					printf(" %d -> ",ready_queue[level].first_node->id);
+				s--;
+			}
+			if (DEBUG==4)
+				printf("Scheduling MLFQ %d\n",s);
+			if(s>=0)
+				break;
+		}
+	}
+	if(ready_queue[level].size<=0)
+		return;
+	current_node = ready_queue[level].first_node;
+	current_node->status = RUNNING;
+	previous_node = current_node->id;
+	if(DEBUG==4)
+			printf("Main Thread Status %d Level %d\n", main_thread->status, level);
+	
+	if(DEBUG==4){
+		for(int p = 0; p<PRIORITY_LEVELS; p++){
+			print_queue(ready_queue[p]);
+		}printf("\n");
+	}
+	if(DEBUG==4)
+			printf("Main Thread Status %d Level %d\n", main_thread->status, level);
+	
+	if(running_thread == NULL){
+		setcontext(current_node->context);
+	}else{
+		if(DEBUG==4)
+			printf("Main Thread Status %d Level %d\n", main_thread->status, level);
+	
+		if(running_thread->status == RUNNING)
+			running_thread->status = READY;
+		swapcontext(running_thread->context, current_node->context);
+	}
 }
 
 // Feel free to add any other functions you need
@@ -375,6 +515,7 @@ void create_timer(){
 void signal_handler (int signum){
 	if(DEBUG==1)
 		printf("Timer Interrupt %d\n", ready_queue[0].size);
+	timer_interrupt = 1;
     schedule();
 }
 
@@ -412,7 +553,7 @@ void print_queue(thread_queue queue){
 	tcb *search_node = queue.first_node;
 
 	while(search_node != NULL){
-		printf("%d(%d) -> ",search_node->id, search_node->status);
+		printf("%d(%d)(%d) -> ",search_node->id, search_node->status, search_node->priority);
 		search_node = search_node->next_thread;
 	}
 	printf("end   size:%d\n",queue.size);

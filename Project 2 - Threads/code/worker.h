@@ -6,7 +6,7 @@
 
 #ifndef WORKER_T_H
 #define WORKER_T_H
-#define PRIORITY_LEVELS 8
+#define PRIORITY_LEVELS 4
 #define RUNNING 0
 #define READY 1
 #define BLOCKED 2
@@ -49,20 +49,8 @@ typedef struct TCB {
 	int priority;
 	int status;
 	int elapsed_counter;
-	void *return_ptr; //stack pointer
+	void *return_ptr; 
 	struct TCB *next_thread;
-	//struct TCB *next_waiting_thread;
-	//struct thread_queue *waiting_queue;
-	/*
-	mypthread_t thread_id;
-    State state;
-    ucontext_t context;
-    void* return_values;
-
-    long elapsed_time;
-    mypthread_t waiting_on_thread_id;
-    Queue* waiting_to_join_queue;
-	*/
 
 } tcb; 
 
@@ -141,5 +129,6 @@ void signal_handler (int signum);
 tcb *find_thread(worker_t thread);
 tcb *search_queue(worker_t thread, thread_queue *queue);
 void print_queue(thread_queue queue);
+static void set_thread(tcb *running_thread, int levelgiven);
 
 #endif

@@ -17,4 +17,4 @@ test:
 
 clean:
 	rm -rf testcase test parallel_cal vector_multiply external_cal *.o ./record/
-#./record/
+
