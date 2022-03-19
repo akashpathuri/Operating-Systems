@@ -156,41 +156,40 @@ int worker_join(worker_t thread, void **value_ptr) {
 int worker_mutex_init(worker_mutex_t *mutex, const pthread_mutexattr_t *mutexattr) {
 	//- initialize data structures for this mutex
 	// YOUR CODE HERE
-//	mutex = (worker_mutex_t*)malloc(sizeof(worker_mutex_t));
-  /*
-    mutex->mymutex_id = (*mutex);
-    mutex->value = 0;
-	mutex->mutex_owner = NULL;
-	mutex->queue = (thread_queue*) malloc(sizeof(thread_queue));
-	memset(mutex->queue, 0, sizeof(thread_queue));
-	mutex->queue->first_node = NULL;
-	mutex->queue->last_node = NULL;
-	mutex->queue->size = 0;
-*/
+	// mutex = (worker_mutex_t*)malloc(sizeof(worker_mutex_t));
+
+    // mutex->mutex_id = (*mutex);
+    // mutex->value = 0;
+	// mutex->mutex_parent = NULL;
+	// mutex->queue = (thread_queue*) malloc(sizeof(thread_queue));
+	// memset(mutex->queue, 0, sizeof(thread_queue));
+	// mutex->queue->first_node = NULL;
+	// mutex->queue->last_node = NULL;
+	// mutex->queue->size = 0;
+
 	return 0;
 };
 
 /* aquire the mutex lock */
 int worker_mutex_lock(worker_mutex_t *mutex) {
 
-        // - use the built-in test-and-set atomic function to test the mutex
-        // - if the mutex is acquired successfully, enter the critical section
-        // - if acquiring mutex fails, push current thread into block list and
-        // context switch to the scheduler thread
-        /*
-		if(__sync_lock_test_and_set(&mutex->value, 1) != 0){
-			enqueue(currentNode, mutex->queue);
-            currentNode->status = BLOCKED;
-			schedule();
-           // swapcontext(&thread->context, &scheduler_thread->context);
-        }
-        else {
-             mutex->mutex_parent = currentNode->id;
-        }
-		
-        */
-		// YOUR CODE HERE
-        return 0;
+	// - use the built-in test-and-set atomic function to test the mutex
+	// - if the mutex is acquired successfully, enter the critical section
+	// - if acquiring mutex fails, push current thread into block list and
+	// context switch to the scheduler thread
+
+	// if(__sync_lock_test_and_set(&mutex->value, 1) != 0){
+	// 	enqueue(current_node, mutex->queue);
+	// 	current_node->status = BLOCKED;
+	// 	schedule();
+	// 	// swapcontext(&thread->context, &scheduler_thread->context);
+	// }
+	// else {
+	// 		mutex->mutex_parent = current_node->id;
+	// }
+	
+	// YOUR CODE HERE
+	return 0;
 };
 
 /* release the mutex lock */
@@ -199,15 +198,12 @@ int worker_mutex_unlock(worker_mutex_t *mutex) {
 	// - put threads in block list to run queue 
 	// so that they could compete for mutex later.
 
-	/*
-     if (mutex->mutex_parent == currentNode->id) {
-	       mutex->mutex_parent = mutex->queue->first_node->id;
-	       dequeue(mutex->queue);
-	       if (mutex->mutex_parent != NULL)
-	          mutex->mutex_parent->status = READY;
-	}
-
-	*/
+    //  if (mutex->mutex_parent == current_node->id) {
+	//        mutex->mutex_parent = mutex->queue->first_node->id;
+	//        dequeue(&mutex->queue);
+	//        if (mutex->mutex_parent != NULL)
+	//           mutex->mutex_parent->status = READY;
+	// }
 
 	// YOUR CODE HERE
 	return 0;
@@ -216,20 +212,19 @@ int worker_mutex_unlock(worker_mutex_t *mutex) {
 /* destroy the mutex */
 int worker_mutex_destroy(worker_mutex_t *mutex) {
 	// - de-allocate dynamic memory created in worker_mutex_init
-    /*
-	thread_queue* queue = mutex->queue;
-       if (queue == NULL)
-        return;
-    tcb* curr = queue->first_node;
-    while (curr != NULL) {
-        tcb* next = curr->next_thread;
-        free(current);
-        current = next;
-    }
-	free(mutex);
+
+	// thread_queue* queue = mutex->queue;
+    //    if (queue == NULL)
+    //     return;
+    // tcb* curr = queue->first_node;
+    // while (curr != NULL) {
+    //     tcb* next = curr->next_thread;
+    //     free(curr);
+    //     curr = next;
+    // }
+	// free(mutex);
 
 
-	*/
 	return 0;
 };
 
