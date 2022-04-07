@@ -3,6 +3,9 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <math.h>
+#include <pthread.h>
+#include <sys/mman.h>
 
 //Assume the address space is 32 bits, so the max memory size is 4GB
 //Page size is 4KB
@@ -35,6 +38,12 @@ struct tlb {
 };
 struct tlb tlb_store;
 
+pthread_mutex_t mutex;
+char *memory;
+pde_t *outer_directory_table;
+pte_t **inner_page_tables;
+char *virtual_address_bitmap;
+char *physical_address_bitmap;
 
 void set_physical_mem();
 pte_t* translate(pde_t *pgdir, void *va);

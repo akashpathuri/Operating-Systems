@@ -1,5 +1,8 @@
 #include "my_vm.h"
 
+bool set_memory = false;
+// int page_offset;
+// int outer_directory_size;
 /*
 Function responsible for allocating and setting your physical memory 
 */
@@ -11,7 +14,25 @@ void set_physical_mem() {
     
     //HINT: Also calculate the number of physical and virtual pages and allocate
     //virtual and physical bitmaps and initialize them
+	set_memory = true;
+	int page_size = PGSIZE;
+	int page_offset = (int)log2(page_size);
+	int virtual_page_bits = 32-page_offset;
+	int outer_directory_size = 1<<(virtual_page_bits/2);
+	int inner_page_size = 1<<(virtual_page_bits-(virtual_page_bits/2));
+	int frame_count = outer_directory_size * inner_page_size;
+	outer_directory_table = (pde_t *) malloc(sizeof(pde_t) * outer_directory_size);
+	inner_page_tables = (pte_t **) malloc(sizeof(pte_t *) * outer_directory_size);
+	for(int i = 0; i < outer_directory_size; i++) {
+		outer_directory_table[i] = -1;
+	}
 
+	memory = mmap(NULL, MEMSIZE, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
+
+	virtual_address_bitmap = (char *) malloc(frame_count / 8);
+	physical_address_bitmap = (char *) malloc(frame_count / 8);
+	
+	pthread_mutex_init(&mutex, NULL);
 }
 
 
@@ -19,8 +40,7 @@ void set_physical_mem() {
  * Part 2: Add a virtual to physical page translation to the TLB.
  * Feel free to extend the function arguments or return type.
  */
-int
-add_TLB(void *va, void *pa)
+int add_TLB(void *va, void *pa)
 {
 
     /*Part 2 HINT: Add a virtual to physical page translation to the TLB */
@@ -34,8 +54,7 @@ add_TLB(void *va, void *pa)
  * Returns the physical page address.
  * Feel free to extend this function and change the return type.
  */
-pte_t *
-check_TLB(void *va) {
+pte_t *check_TLB(void *va) {
 
     /* Part 2: TLB lookup code here */
 
@@ -46,8 +65,7 @@ check_TLB(void *va) {
  * Part 2: Print TLB miss rate.
  * Feel free to extend the function arguments or return type.
  */
-void
-print_TLB_missrate()
+void print_TLB_missrate()
 {
     double miss_rate = 0;	
 
@@ -86,8 +104,7 @@ as an argument, and sets a page table entry. This function will walk the page
 directory to see if there is an existing mapping for a virtual address. If the
 virtual address is not present, then a new entry will be added
 */
-int
-page_map(pde_t *pgdir, void *va, void *pa)
+int page_map(pde_t *pgdir, void *va, void *pa)
 {
 
     /*HINT: Similar to translate(), find the page directory (1st level)
@@ -121,7 +138,13 @@ void *t_malloc(unsigned int num_bytes) {
     * free pages are available, set the bitmaps and map a new page. Note, you will 
     * have to mark which physical pages are used. 
     */
+   	pthread_mutex_lock(&mutex);
+	
+   	if(!set_memory)
+		set_physical_mem();
+	
 
+	pthread_mutex_unlock(&mutex);
     return NULL;
 }
 
