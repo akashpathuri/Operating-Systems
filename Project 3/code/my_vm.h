@@ -3,13 +3,6 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <stdint.h>
-#include <sys/mman.h>
-#include <math.h>
-#include <errno.h>
-#include <string.h>
-#include <time.h>
-#include <pthread.h>
 
 //Assume the address space is 32 bits, so the max memory size is 4GB
 //Page size is 4KB
@@ -38,25 +31,10 @@ struct tlb {
     * Think about the size of each TLB entry that performs virtual to physical
     * address translation.
     */
-   pte_t frame_number;
-   struct tlb *next;
-   int prev_index; 
-   int curr_index;
-   int page_num;
+
 };
+struct tlb tlb_store;
 
-struct tlb *tlb_store;
-
-char *memory;
-pde_t *directory;
-pte_t **page_tables;
-char *virtual_bitmap;
-char *physical_bitmap;
-
-unsigned int checks;
-unsigned int misses;
-
-pthread_mutex_t mutex;
 
 void set_physical_mem();
 pte_t* translate(pde_t *pgdir, void *va);
@@ -69,13 +47,5 @@ void put_value(void *va, void *val, int size);
 void get_value(void *va, void *val, int size);
 void mat_mult(void *mat1, void *mat2, int size, void *answer);
 void print_TLB_missrate();
-
-//Modular Functions or Helper Functions
-int get_physical_bit(int bit);
-int get_virtual_bit(int bit);
-void set_physical_bit(int bit);
-void set_virtual_bit(int bit);
-void clear_physical_bit(int bit);
-void clear_virtual_bit(int bit);
 
 #endif
