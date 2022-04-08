@@ -36,6 +36,7 @@ void SetPhysicalMem() {
    	directory_size = 1 << directory_bits;
    	page_table_size = 1 << page_bits;
    	num_frames = directory_size * page_table_size;
+	printf("num_frames: %p\n", num_frames);
 	directory = (pde_t *) malloc(sizeof(pde_t) * directory_size);
 	page_tables = (pte_t **) malloc(sizeof(pte_t *) * directory_size);
 	
