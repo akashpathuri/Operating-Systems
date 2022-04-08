@@ -39,9 +39,10 @@ struct tlb {
 struct tlb tlb_store;
 
 pthread_mutex_t mutex;
-char *memory;
+char *physical_memory;
 pde_t *outer_directory_table;
 pte_t **inner_page_tables;
+int total_frames;
 char *virtual_address_bitmap;
 char *physical_address_bitmap;
 
@@ -56,5 +57,7 @@ void put_value(void *va, void *val, int size);
 void get_value(void *va, void *val, int size);
 void mat_mult(void *mat1, void *mat2, int size, void *answer);
 void print_TLB_missrate();
+void set_bit_at_index(char *bitmap, int index);
+int get_bit_at_index(char *bitmap, int index);
 
 #endif

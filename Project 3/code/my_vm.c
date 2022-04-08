@@ -10,27 +10,29 @@ void set_physical_mem() {
 
     //Allocate physical memory using mmap or malloc; this is the total size of
     //your memory you are simulating
+	physical_memory = mmap(NULL, MEMSIZE, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
 
     
     //HINT: Also calculate the number of physical and virtual pages and allocate
     //virtual and physical bitmaps and initialize them
-	set_memory = true;
-	int page_size = PGSIZE;
-	int page_offset = (int)log2(page_size);
-	int virtual_page_bits = 32-page_offset;
-	int outer_directory_size = 1<<(virtual_page_bits/2);
-	int inner_page_size = 1<<(virtual_page_bits-(virtual_page_bits/2));
-	int frame_count = outer_directory_size * inner_page_size;
+	int offset_bits = (int)log2(PGSIZE);
+	int virtual_page_bits = 32-offset_bits;
+	int outer_bits = virtual_page_bits/2;
+	int inner_bits = 32-offset_bits-outer_bits;
+
+	int outer_directory_size = 1<<outer_bits;
+	int inner_page_size = 1<<inner_bits;
+	total_frames = outer_directory_size * inner_page_size;
 	outer_directory_table = (pde_t *) malloc(sizeof(pde_t) * outer_directory_size);
-	inner_page_tables = (pte_t **) malloc(sizeof(pte_t *) * outer_directory_size);
-	for(int i = 0; i < outer_directory_size; i++) {
-		outer_directory_table[i] = -1;
-	}
+	inner_page_tables = (pte_t **) malloc(sizeof(pte_t *) * inner_page_size);
+	// virtual_address_bitmap = (char *) malloc(frame_count / 8);
+	// physical_address_bitmap = (char *) malloc(frame_count / 8);
+	
+	// for(int i = 0; i < outer_directory_size; i++) {
+	// 	outer_directory_table[i] = -1;
+	// }
 
-	memory = mmap(NULL, MEMSIZE, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
 
-	virtual_address_bitmap = (char *) malloc(frame_count / 8);
-	physical_address_bitmap = (char *) malloc(frame_count / 8);
 	
 	pthread_mutex_init(&mutex, NULL);
 }
@@ -120,8 +122,39 @@ int page_map(pde_t *pgdir, void *va, void *pa)
 void *get_next_avail(int num_pages) {
  
     //Use virtual address bitmap to find the next free page
+	for(int x = 0; x<total_frames; x++){
+		int enoughtSpace = 0;
+		for(int y = x; y < num_pages+x; y++) {
+			if(!get_bit_at_index(virtual_address_bitmap, y)) {
+				enoughtSpace++;
+			}
+		}
+		if(enoughtSpace == num_pages ){
+			for(int y = x; y < num_pages+x; y++) {
+				set_bit_at_index(virtual_address_bitmap, y);
+			}
+			return (void *) (x*PGSIZE);
+		}
+	}
+	return NULL;
 }
 
+void set_bit_at_index(char *bitmap, int index)
+{
+    //Implement your code here	
+    int element = index /8;
+    bitmap[element] |= (1 << (index%8));
+    return;
+}
+
+int get_bit_at_index(char *bitmap, int index)
+{
+    //Get to the location in the character bitmap array
+    //Implement your code here
+    int element = index /8;
+    int bit = bitmap[element] & (1 << (index%8));
+    return bit >> (index%8);
+}
 
 /* Function responsible for allocating pages
 and used by the benchmark
@@ -134,14 +167,24 @@ void *t_malloc(unsigned int num_bytes) {
 
    /* 
     * HINT: If the page directory is not initialized, then initialize the
-    * page directory. Next, using get_next_avail(), check if there are free pages. If
-    * free pages are available, set the bitmaps and map a new page. Note, you will 
+    * page directory. Next, using get_next_avail(),
+	* check if there are free pages. If free pages are available, 
+	* set the bitmaps and map a new page. Note, you will 
     * have to mark which physical pages are used. 
     */
    	pthread_mutex_lock(&mutex);
 	
-   	if(!set_memory)
+   	if(physical_memory == NULL)
 		set_physical_mem();
+
+	int pages_required = num_bytes/PGSIZE;
+	if(num_bytes%PGSIZE >0)
+		pages_required++;
+	
+	void *page_virutal_address = get_next_avail(pages_required);
+	if(page_virutal_address== NULL)
+		return NULL;
+
 	
 
 	pthread_mutex_unlock(&mutex);
