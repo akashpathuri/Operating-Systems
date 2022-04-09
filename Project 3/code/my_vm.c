@@ -1,8 +1,10 @@
 #include "my_vm.h"
 
-bool set_memory = false;
 // int page_offset;
 // int outer_directory_size;
+int outer_bits;
+int inner_bits;
+int offset_bits;
 /*
 Function responsible for allocating and setting your physical memory 
 */
@@ -15,16 +17,16 @@ void set_physical_mem() {
     
     //HINT: Also calculate the number of physical and virtual pages and allocate
     //virtual and physical bitmaps and initialize them
-	int offset_bits = (int)log2(PGSIZE);
+	offset_bits = (int)log2(PGSIZE);
 	int virtual_page_bits = 32-offset_bits;
-	int outer_bits = virtual_page_bits/2;
-	int inner_bits = 32-offset_bits-outer_bits;
+	outer_bits = virtual_page_bits/2;
+	inner_bits = 32-offset_bits-outer_bits;
 
 	int outer_directory_size = 1<<outer_bits;
 	int inner_page_size = 1<<inner_bits;
 	total_frames = outer_directory_size * inner_page_size;
 	outer_directory_table = (pde_t *) malloc(sizeof(pde_t) * outer_directory_size);
-	inner_page_tables = (pte_t **) malloc(sizeof(pte_t *) * inner_page_size);
+	inner_page_tables = (pte_t **) malloc(sizeof(pte_t *) * outer_directory_size);
 	// virtual_address_bitmap = (char *) malloc(frame_count / 8);
 	// physical_address_bitmap = (char *) malloc(frame_count / 8);
 	
@@ -181,9 +183,16 @@ void *t_malloc(unsigned int num_bytes) {
 	if(num_bytes%PGSIZE >0)
 		pages_required++;
 	
-	void *page_virutal_address = get_next_avail(pages_required);
-	if(page_virutal_address== NULL)
+	void *virtual_address = get_next_avail(pages_required);
+	if(virtual_address== NULL)
 		return NULL;
+    
+    int outer_index = (uintptr_t)virtual_address >> (32- (offset_bits+inner_bits));
+
+
+    int inner_index = (uintptr_t)virtual_address <<outer_bits;
+    inner_index >>= (32-inner_bits);
+    
 
 	
 
