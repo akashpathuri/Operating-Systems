@@ -5,6 +5,8 @@
 int outer_bits;
 int inner_bits;
 int offset_bits;
+checks = 0;
+misses = 0;
 /*
 Function responsible for allocating and setting your physical memory 
 */
@@ -34,7 +36,7 @@ void set_physical_mem() {
 	// 	outer_directory_table[i] = -1;
 	// }
 
-
+   // tlb_store = NULL;
 	
 	pthread_mutex_init(&mutex, NULL);
 }
@@ -46,8 +48,65 @@ void set_physical_mem() {
  */
 int add_TLB(void *va, void *pa)
 {
-
-    /*Part 2 HINT: Add a virtual to physical page translation to the TLB */
+    struct tlb *ptr_tlb;
+    
+    if(tlb_store == NULL) { //Checking if any tlb entries exist
+    	tlb_store = malloc(sizeof(struct tlb));
+    	tlb_store->index = 0;
+    	ptr_tlb = tlb_store;
+    }
+    //the average case is when 1 or more entries exist meaning we must traverse til the end of the linked list
+	for(ptr_tlb = tlb_store; ptr_tlb->link != NULL; ptr_tlb = ptr_tlb->link) {}
+	if(ptr_tlb->index!=TLB_ENTRIES){
+        ptr_tlb->link = malloc(sizeof(struct tlb));
+        ptr_tlb->link->index = ptr_tlb->index + 1;
+        ptr_tlb = ptr_tlb->link;
+        ptr_tlb->physAddr = pa;
+        ptr_tlb->virtAddr = va;
+        ptr_tlb->age = 0;
+    //	ptr_tlb->page_number = ((uintptr_t) va) >> offset_bits;
+    //	ptr_tlb->frame = ((char *) pa - physical_memory) / PGSIZE;
+   	    ptr_tlb->link = NULL;
+    }
+    
+   	// find a TLB entry to replace
+   	else{
+   		int maxAge = 0;
+   		int maxAge_index = 0;
+   		
+   		// find the max age value
+        ptr_tlb = tlb_store;
+   		while(ptr_tlb != NULL) {
+   			if(ptr_tlb->age > maxAge) {
+   				maxAge = ptr_tlb->age;
+   				maxAge_index = ptr_tlb->index;
+   			}
+            ptr_tlb = ptr_tlb->link;
+   		}
+   		
+   		// replace the entry from the linked list with updated data
+   		if(maxAge_index == 0) {
+   			tlb_store->age = 0;
+            tlb_store->virtAddr = va;
+            tlb_store->physAddr = pa;
+   		} else {
+            //if it is not the first element in the list, we must increment to the maxAge_index and replace the oldest entry
+			for(ptr_tlb = tlb_store; ptr_tlb != NULL; ptr_tlb = ptr_tlb->link) {
+	   			if(ptr_tlb->index == maxAge_index) {
+	   				ptr_tlb->age = 0;
+                    ptr_tlb->virtAddr = va;
+                    ptr_tlb->physAddr = pa;
+	   				break;
+	   			}
+	   		}
+   		}
+   		
+   		// lower the index of each TLB entry after the removed entry
+   		// while(ptr_tlb != NULL) {
+   		// 	tlb->index--;
+   		// 	tlb = tlb->next;
+   		// }
+   	}
 
     return -1;
 }
@@ -61,6 +120,36 @@ int add_TLB(void *va, void *pa)
 pte_t *check_TLB(void *va) {
 
     /* Part 2: TLB lookup code here */
+    checks++;
+
+	if(tlb_store == NULL) {
+		misses++;
+		return NULL;
+	}
+
+	struct tlb *ptr_tlb; 
+	
+	for(ptr_tlb = tlb_store; ptr_tlb != NULL; ptr_tlb = tlb_store->link) {
+		if(ptr_tlb->virtAddr == va) {
+			ptr_tlb->age = 0;
+            return ptr_tlb->physAddr;
+            
+		} else {
+			// increment last_used of every other TLB entry
+			ptr_tlb->age++;
+    	}
+	
+	
+	}
+    //If it has reached here then it could not find it, meaning we return null and increment misses.
+	
+	misses++;
+	
+	return NULL;
+
+
+
+
 
 }
 
@@ -75,7 +164,7 @@ void print_TLB_missrate()
 
     /*Part 2 Code here to calculate and print the TLB miss rate*/
 
-
+    miss_rate =  misses/checks; 
 
 
     fprintf(stderr, "TLB miss rate %lf \n", miss_rate);
@@ -95,6 +184,32 @@ pte_t *translate(pde_t *pgdir, void *va) {
     * Part 2 HINT: Check the TLB before performing the translation. If
     * translation exists, then you can return physical address from the TLB.
     */
+    uintptr_t virtual_address = (uintptr_t) va;
+    pte_t *checker = check_TLB(va);
+    //Since we are checking before instead of after performing numerous operations we save some runtime.
+    int offset = virtual_address & ((1 << offset_bits) -1);
+    if(checker != NULL) {
+        //if found then return
+    	return (pte_t *) ((char *) checker + offset);
+      
+    } else {
+        //create the physical address and add it to the TLB since it was not found, TLB miss
+	    int firstLevel = virtual_address & ((1 << offset_bits) - 1);
+        int secondLevelIndex = virtual_address >> (32 - outer_bits);
+		int page_table_index = (virtual_address >> offset_bits) & ((1 << (inner_bits)) - 1);
+		pte_t *page_table = inner_page_tables[pgdir[secondLevelIndex]];
+		pte_t index = page_table[page_table_index];
+		
+		void *pa = index * PGSIZE + physical_memory + firstLevel; 
+		
+		add_TLB(va, pa);
+        
+		return (pte_t *) pa;
+    	
+    }
+
+
+
 
 
     //If translation not successful, then return NULL
@@ -275,6 +390,5 @@ void mat_mult(void *mat1, void *mat2, int size, void *answer) {
         }
     }
 }
-
 
 
