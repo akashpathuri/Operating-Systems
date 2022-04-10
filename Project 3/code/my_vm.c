@@ -1,12 +1,10 @@
 #include "my_vm.h"
 
-// int page_offset;
-// int outer_directory_size;
+int outer_directory_size;
+int inner_table_size;
 int outer_bits;
 int inner_bits;
 int offset_bits;
-checks = 0;
-misses = 0;
 /*
 Function responsible for allocating and setting your physical memory 
 */
@@ -24,9 +22,9 @@ void set_physical_mem() {
 	outer_bits = virtual_page_bits/2;
 	inner_bits = 32-offset_bits-outer_bits;
 
-	int outer_directory_size = 1<<outer_bits;
-	int inner_page_size = 1<<inner_bits;
-	total_frames = outer_directory_size * inner_page_size;
+	outer_directory_size = 1<<outer_bits;
+	inner_table_size = 1<<inner_bits;
+	total_frames = outer_directory_size * inner_table_size;
 	outer_directory_table = (pde_t *) malloc(sizeof(pde_t) * outer_directory_size);
 	inner_page_tables = (pte_t **) malloc(sizeof(pte_t *) * outer_directory_size);
 	// virtual_address_bitmap = (char *) malloc(frame_count / 8);
@@ -36,7 +34,7 @@ void set_physical_mem() {
 	// 	outer_directory_table[i] = -1;
 	// }
 
-   // tlb_store = NULL;
+
 	
 	pthread_mutex_init(&mutex, NULL);
 }
@@ -217,6 +215,7 @@ pte_t *translate(pde_t *pgdir, void *va) {
 }
 
 
+
 /*
 The function takes a page directory address, virtual address, physical address
 as an argument, and sets a page table entry. This function will walk the page
@@ -308,11 +307,57 @@ void *t_malloc(unsigned int num_bytes) {
     int inner_index = (uintptr_t)virtual_address <<outer_bits;
     inner_index >>= (32-inner_bits);
     
-
+    if(outer_directory_table[outer_index] == -1) {
+		// find a page table with a number of consecutive free entries equal to num_pages
+		int i;
+		for(i = 0; i < outer_directory_size && inner_index == -1; i++) {
+			pte_t *table = inner_page_tables[i];
+			
+			int j;
+			for(j = 0; j <= inner_table_size - pages_required; j++) {
+				bool valid = true;
+				
+				int k;
+				for(k = 0; k < pages_required; k++) {
+					if(table[j + k] != -1) {
+						valid = false;
+						break;
+					}
+				}
+				
+				if(valid) {
+					i--;
+					break;
+				}
+			}
+		}
+		
+		outer_directory_table[outer_index] = i;
+	}
+	
+	// find an available frame for each page and map them together
+	void *ptr;
+	int k;
+	for(k = 0; k < pages_required; k++) {
+		// find a free frame
+		int i;
+		for(i = 0; i < total_frames; i++) {
+			if(!get_physical_bit(i)) {
+				set_physical_bit(i);
+				break;
+			}
+		}
+	
+		PageMap(outer_directory_table, virtual_address + k * PGSIZE, physical_memory + i * PGSIZE);
+		
+		if(k == 0) {
+			ptr = virtual_address;
+		}
+	}
 	
 
 	pthread_mutex_unlock(&mutex);
-    return NULL;
+    return ptr;
 }
 
 /* Responsible for releasing one or more memory pages using virtual address (va)
@@ -325,7 +370,9 @@ void t_free(void *va, int size) {
      *
      * Part 2: Also, remove the translation from the TLB
      */
-    
+    int page_count = size/PGSIZE;
+	if(size%PGSIZE >0)
+		page_count++;
 }
 
 
@@ -390,5 +437,6 @@ void mat_mult(void *mat1, void *mat2, int size, void *answer) {
         }
     }
 }
+
 
 
