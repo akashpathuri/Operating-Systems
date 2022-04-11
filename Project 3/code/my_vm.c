@@ -5,6 +5,8 @@ int inner_table_size;
 int outer_bits;
 int inner_bits;
 int offset_bits;
+char *directory_bitmap;
+
 /*
 Function responsible for allocating and setting your physical memory 
 */
@@ -27,8 +29,9 @@ void set_physical_mem() {
 	total_frames = outer_directory_size * inner_table_size;
 	outer_directory_table = (pde_t *) malloc(sizeof(pde_t) * outer_directory_size);
 	inner_page_tables = (pte_t **) malloc(sizeof(pte_t *) * outer_directory_size);
-	// virtual_address_bitmap = (char *) malloc(frame_count / 8);
-	// physical_address_bitmap = (char *) malloc(frame_count / 8);
+	virtual_address_bitmap = (char *) malloc(total_frames / 8);
+	physical_address_bitmap = (char *) malloc(total_frames / 8);
+	
 	
 	// for(int i = 0; i < outer_directory_size; i++) {
 	// 	outer_directory_table[i] = -1;
@@ -228,6 +231,29 @@ int page_map(pde_t *pgdir, void *va, void *pa)
     /*HINT: Similar to translate(), find the page directory (1st level)
     and page table (2nd-level) indices. If no mapping exists, set the
     virtual to physical mapping */
+    int outer_index = (uintptr_t)va >> offset_bits;
+	outer_bits >>= inner_bits;
+
+    int inner_index = (uintptr_t)va <<outer_bits;
+    inner_index >>= offset_bits;
+	inner_bits >>= outer_bits;
+
+	pde_t directory = outer_directory_table[outer_index];
+	pte_t *table = inner_page_tables[directory];
+	int frame = table[inner_index];
+	// table not initialized yet, malloc and set all entries to -1
+	if(table == NULL) {
+		inner_page_tables[directory] = (pte_t *) malloc(sizeof(pte_t) * inner_table_size);
+		table = inner_page_tables[directory];
+		
+		for(int i = 0; i < inner_table_size; i++)
+			table[i] = -1;
+	}
+	
+	if(table[inner_index] == -1) {
+		table[inner_index] = ((char *) pa - physical_memory) / PGSIZE;
+		return 1;
+	}
 
     return -1;
 }
@@ -255,18 +281,19 @@ void *get_next_avail(int num_pages) {
 	return NULL;
 }
 
-void set_bit_at_index(char *bitmap, int index)
-{
-    //Implement your code here	
+void set_bit_at_index(char *bitmap, int index){
     int element = index /8;
     bitmap[element] |= (1 << (index%8));
     return;
 }
 
-int get_bit_at_index(char *bitmap, int index)
-{
-    //Get to the location in the character bitmap array
-    //Implement your code here
+void clear_bit_at_index(char *bitmap, int index){
+    int element = index /8;
+    bitmap[element] &= ~(1 << (index%8));
+    return;
+}
+
+int get_bit_at_index(char *bitmap, int index){
     int element = index /8;
     int bit = bitmap[element] & (1 << (index%8));
     return bit >> (index%8);
@@ -288,76 +315,61 @@ void *t_malloc(unsigned int num_bytes) {
 	* set the bitmaps and map a new page. Note, you will 
     * have to mark which physical pages are used. 
     */
-   	pthread_mutex_lock(&mutex);
-	
    	if(physical_memory == NULL)
 		set_physical_mem();
 
+   	pthread_mutex_lock(&mutex);
+	
 	int pages_required = num_bytes/PGSIZE;
 	if(num_bytes%PGSIZE >0)
 		pages_required++;
 	
 	void *virtual_address = get_next_avail(pages_required);
-	if(virtual_address== NULL)
+	if(virtual_address== NULL){
+		pthread_mutex_unlock(&mutex);
 		return NULL;
+	}
+		
     
-    int outer_index = (uintptr_t)virtual_address >> (32- (offset_bits+inner_bits));
-
+    int outer_index = (uintptr_t)virtual_address >> offset_bits;
+	outer_bits >>= inner_bits;
 
     int inner_index = (uintptr_t)virtual_address <<outer_bits;
-    inner_index >>= (32-inner_bits);
+    inner_index >>= offset_bits;
+	inner_bits >>= outer_bits;
     
     if(outer_directory_table[outer_index] == -1) {
-		// find a page table with a number of consecutive free entries equal to num_pages
-		int i;
-		for(i = 0; i < outer_directory_size && inner_index == -1; i++) {
-			pte_t *table = inner_page_tables[i];
-			
-			int j;
-			for(j = 0; j <= inner_table_size - pages_required; j++) {
-				bool valid = true;
-				
-				int k;
-				for(k = 0; k < pages_required; k++) {
-					if(table[j + k] != -1) {
-						valid = false;
+		for(int i = 0; i < outer_directory_size && inner_index == -1; i++) {
+			pte_t *inner_table = inner_page_tables[i];
+			for(int j = 0; j <= inner_table_size - pages_required; j++) {
+				int space = 0;				
+				for(int k = 0; k < pages_required; k++) {
+					if(inner_table[j + k] != -1) {
+						space++;
 						break;
 					}
 				}
-				
-				if(valid) {
-					i--;
+				if(space == pages_required) {
+					outer_directory_table[outer_index] = i-1;
 					break;
 				}
 			}
 		}
-		
-		outer_directory_table[outer_index] = i;
 	}
 	
 	// find an available frame for each page and map them together
-	void *ptr;
-	int k;
-	for(k = 0; k < pages_required; k++) {
-		// find a free frame
-		int i;
-		for(i = 0; i < total_frames; i++) {
-			if(!get_physical_bit(i)) {
-				set_physical_bit(i);
+	for(int i = 0; i < pages_required; i++) {
+		for(int j = 0; j < total_frames; j++) {
+			if(!get_bit_at_index(physical_address_bitmap, j)) {
+				set_bit_at_index(physical_address_bitmap, j);
+				page_map(outer_directory_table, virtual_address + i * PGSIZE, physical_memory + j * PGSIZE);
 				break;
 			}
 		}
-	
-		PageMap(outer_directory_table, virtual_address + k * PGSIZE, physical_memory + i * PGSIZE);
-		
-		if(k == 0) {
-			ptr = virtual_address;
-		}
 	}
-	
 
 	pthread_mutex_unlock(&mutex);
-    return ptr;
+    return virtual_address;
 }
 
 /* Responsible for releasing one or more memory pages using virtual address (va)
@@ -373,6 +385,38 @@ void t_free(void *va, int size) {
     int page_count = size/PGSIZE;
 	if(size%PGSIZE >0)
 		page_count++;
+	
+	for(int i = 0; i < page_count; i++) {
+		int outer_index = (uintptr_t)va >> offset_bits;
+		outer_bits >>= inner_bits;
+
+		int inner_index = (uintptr_t)va <<outer_bits;
+		inner_index >>= offset_bits;
+		inner_bits >>= outer_bits;
+    	
+		int offset = (uintptr_t)va << (outer_bits+inner_bits);
+		offset >>= (outer_bits+inner_bits);
+		if(offset) return;
+		
+		int page_bit = (uintptr_t) va / PGSIZE + i;
+		
+		pthread_mutex_lock(&mutex);
+		if(get_bit_at_index(virtual_address_bitmap, page_bit)){
+			clear_bit_at_index(virtual_address_bitmap, page_bit);
+
+			pde_t directory = outer_directory_table[outer_index];
+			pte_t *table = inner_page_tables[directory];
+			int frame = table[inner_index];
+			table[inner_index] = -1;
+			if(get_bit_at_index(physical_address_bitmap, frame))
+				clear_bit_at_index(physical_address_bitmap, frame);
+			
+			pthread_mutex_unlock(&mutex);
+		} else { // pointing to unused page, invalid pointer
+			pthread_mutex_unlock(&mutex);
+			return;
+		}
+    }
 }
 
 
@@ -387,7 +431,44 @@ void put_value(void *va, void *val, int size) {
      * than one page. Therefore, you may have to find multiple pages using translate()
      * function.
      */
+	int offset = (uintptr_t)va << (outer_bits+inner_bits);
+	offset >>= (outer_bits+inner_bits);
+	if(offset) return;
 
+	pthread_mutex_lock(&mutex);
+	void *physical_address = translate(outer_directory_table, va);
+
+	// invalid virtual address
+	if(!get_bit_at_index(virtual_address_bitmap, ((uintptr_t) va) / PGSIZE))
+		return;
+
+	int remaining_in_page = PGSIZE - offset;
+	if(size <= remaining_in_page) {
+		memcpy(physical_address, val, size);
+	} else {
+		memcpy(physical_address, val, remaining_in_page);
+		size -= remaining_in_page;
+		va += remaining_in_page;
+		val += remaining_in_page;
+		
+		while(size > 0) {
+			if(!get_bit_at_index(virtual_address_bitmap, ((uintptr_t) va) / PGSIZE)) return;
+		
+			physical_address = translate(outer_directory_table, va);
+			
+			if(size % PGSIZE == 0) {
+				memcpy(physical_address, val, PGSIZE);
+			} else {
+				memcpy(physical_address, val, size % PGSIZE);
+			}
+			
+			size -= PGSIZE;
+			va += PGSIZE;
+			val += PGSIZE;
+		}
+	}
+	
+	pthread_mutex_unlock(&mutex);
 
 }
 
@@ -399,6 +480,45 @@ void get_value(void *va, void *val, int size) {
     * "val" address. Assume you can access "val" directly by derefencing them.
     */
 
+	int offset = (uintptr_t)va << (outer_bits+inner_bits);
+	offset >>= (outer_bits+inner_bits);
+	if(offset) return;
+
+	pthread_mutex_lock(&mutex);
+	void *physical_address = translate(outer_directory_table, va);
+
+	// invalid virtual address
+	if(!get_bit_at_index(virtual_address_bitmap, ((uintptr_t) va) / PGSIZE))
+		return;
+
+	int remaining_in_page = PGSIZE - offset;
+	if(size <= remaining_in_page) {
+		memcpy(val, physical_address, size);
+	} else {
+		memcpy(val, physical_address, remaining_in_page);
+		size -= remaining_in_page;
+		va += remaining_in_page;
+		val += remaining_in_page;
+		
+		while(size > 0) {
+			if(!get_bit_at_index(virtual_address_bitmap, ((uintptr_t) va) / PGSIZE)) return;
+		
+			physical_address = translate(outer_directory_table, va);
+			
+			if(size % PGSIZE == 0) {
+				memcpy(val, physical_address, PGSIZE);
+			} else {
+				memcpy(val, physical_address, size % PGSIZE);
+			}
+			
+			size -= PGSIZE;
+			va += PGSIZE;
+			val += PGSIZE;
+		}
+	}
+	
+	pthread_mutex_unlock(&mutex);
+   
 
 }
 

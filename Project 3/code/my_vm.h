@@ -69,5 +69,5 @@ void mat_mult(void *mat1, void *mat2, int size, void *answer);
 void print_TLB_missrate();
 void set_bit_at_index(char *bitmap, int index);
 int get_bit_at_index(char *bitmap, int index);
-
+void clear_bit_at_index(char *bitmap, int index);
 #endif
