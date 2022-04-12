@@ -6,6 +6,7 @@ int outer_bits;
 int inner_bits;
 int offset_bits;
 char *directory_bitmap;
+char **page_tables_bitmap;
 
 /*
 Function responsible for allocating and setting your physical memory 
@@ -31,6 +32,8 @@ void set_physical_mem() {
 	inner_page_tables = (pte_t **) malloc(sizeof(pte_t *) * outer_directory_size);
 	virtual_address_bitmap = (char *) malloc(total_frames / 8);
 	physical_address_bitmap = (char *) malloc(total_frames / 8);
+	directory_bitmap = (char *) malloc(outer_directory_size / 8);
+	page_tables_bitmap = (char **) malloc(outer_directory_size / 8);
 	
 	
 	// for(int i = 0; i < outer_directory_size; i++) {
@@ -186,35 +189,57 @@ pte_t *translate(pde_t *pgdir, void *va) {
     * translation exists, then you can return physical address from the TLB.
     */
     uintptr_t virtual_address = (uintptr_t) va;
-    pte_t *checker = check_TLB(va);
-    //Since we are checking before instead of after performing numerous operations we save some runtime.
     int offset = virtual_address & ((1 << offset_bits) -1);
-    if(checker != NULL) {
-        //if found then return
-    	return (pte_t *) ((char *) checker + offset);
+    //Since we are checking before instead of after performing numerous operations we save some runtime.
+    // if(check_TLB(va) != NULL) {
+    //     //if found then return
+    // 	return (pte_t *) ((char *) check_TLB(va) + offset);
       
-    } else {
-        //create the physical address and add it to the TLB since it was not found, TLB miss
-	    int firstLevel = virtual_address & ((1 << offset_bits) - 1);
-        int secondLevelIndex = virtual_address >> (32 - outer_bits);
-		int page_table_index = (virtual_address >> offset_bits) & ((1 << (inner_bits)) - 1);
-		pte_t *page_table = inner_page_tables[pgdir[secondLevelIndex]];
-		pte_t index = page_table[page_table_index];
+    // } else {
+        //create the physical address and add it to the TLB since it was not found, TLB miss (incremented in add_tlb)
+	    int outer_index = (uintptr_t)virtual_address >> offset_bits;
+		outer_index >>= inner_bits;
+
+		int inner_index = (uintptr_t)virtual_address <<outer_bits;
+		inner_index >>= offset_bits;
+		inner_index >>= outer_bits;
+
+		//  offset = (uintptr_t)va << (outer_bits+inner_bits);
+		// offset >>= (outer_bits+inner_bits);
+
+		pde_t directory = outer_directory_table[outer_index];
+		pte_t *page_table = inner_page_tables[directory];
+		pte_t page = page_table[inner_index];
+
+		// int firstLevel = virtual_address & ((1 << offset_bits) - 1);
+        // int secondLevelIndex = virtual_address >> (32 - outer_bits);
+		// int page_table_index = (virtual_address >> offset_bits) & ((1 << (inner_bits)) - 1);
+		// pde_t *page_table = inner_page_tables[pgdir[secondLevelIndex]];
+		// pte_t index = page_table[page_table_index];
+		// int directory_index = ptr >> (32 - directory_bits);
+		// pte_t *table = page_tables[pgdir[directory_index]];
 		
-		void *pa = index * PGSIZE + physical_memory + firstLevel; 
+		// int table_index = (ptr >> offset_bits) & ((1 << (page_bits)) - 1);
+		// pte_t index = table[table_index];
+		// void *pa = memory + index * PGSIZE + offset;
 		
-		add_TLB(va, pa);
+		
+		//pte_t *pa = physical_memory[page * PGSIZE] + (pte_t *)offset; 
+
+		void *pa = page * PGSIZE + physical_memory + offset; 
+		
+		//add_TLB(va, pa);
         
 		return (pte_t *) pa;
     	
-    }
+    // }
 
 
 
 
 
-    //If translation not successful, then return NULL
-    return NULL; 
+    // //If translation not successful, then return NULL
+    // return NULL; 
 }
 
 
@@ -232,15 +257,13 @@ int page_map(pde_t *pgdir, void *va, void *pa)
     and page table (2nd-level) indices. If no mapping exists, set the
     virtual to physical mapping */
     int outer_index = (uintptr_t)va >> offset_bits;
-	outer_bits >>= inner_bits;
+	outer_index >>= inner_bits;
 
     int inner_index = (uintptr_t)va <<outer_bits;
-    inner_index >>= offset_bits;
-	inner_bits >>= outer_bits;
+    inner_index >>= (outer_bits +offset_bits);
 
 	pde_t directory = outer_directory_table[outer_index];
 	pte_t *table = inner_page_tables[directory];
-	int frame = table[inner_index];
 	// table not initialized yet, malloc and set all entries to -1
 	if(table == NULL) {
 		inner_page_tables[directory] = (pte_t *) malloc(sizeof(pte_t) * inner_table_size);
@@ -315,6 +338,14 @@ void *t_malloc(unsigned int num_bytes) {
 	* set the bitmaps and map a new page. Note, you will 
     * have to mark which physical pages are used. 
     */
+   	//pthread_mutex_lock(&mutex);
+	// if(physical_memory == NULL){
+	// 	pthread_mutex_init(&mutex, NULL);
+	// 	pthread_mutex_lock(&mutex);
+	// 	set_physical_mem();
+	// }else {
+	// 	pthread_mutex_lock(&mutex);
+	// }
    	if(physical_memory == NULL)
 		set_physical_mem();
 
@@ -332,13 +363,13 @@ void *t_malloc(unsigned int num_bytes) {
 		
     
     int outer_index = (uintptr_t)virtual_address >> offset_bits;
-	outer_bits >>= inner_bits;
+	outer_index >>= inner_bits;
 
     int inner_index = (uintptr_t)virtual_address <<outer_bits;
     inner_index >>= offset_bits;
-	inner_bits >>= outer_bits;
+	inner_index >>= outer_bits;
     
-    if(outer_directory_table[outer_index] == -1) {
+    if(!get_bit_at_index(directory_bitmap, outer_index)) {
 		for(int i = 0; i < outer_directory_size && inner_index == -1; i++) {
 			pte_t *inner_table = inner_page_tables[i];
 			for(int j = 0; j <= inner_table_size - pages_required; j++) {
@@ -351,6 +382,7 @@ void *t_malloc(unsigned int num_bytes) {
 				}
 				if(space == pages_required) {
 					outer_directory_table[outer_index] = i-1;
+					set_bit_at_index(directory_bitmap, outer_index);
 					break;
 				}
 			}
@@ -388,14 +420,15 @@ void t_free(void *va, int size) {
 	
 	for(int i = 0; i < page_count; i++) {
 		int outer_index = (uintptr_t)va >> offset_bits;
-		outer_bits >>= inner_bits;
+		outer_index >>= inner_bits;
 
 		int inner_index = (uintptr_t)va <<outer_bits;
 		inner_index >>= offset_bits;
-		inner_bits >>= outer_bits;
+		inner_index >>= outer_bits;
     	
 		int offset = (uintptr_t)va << (outer_bits+inner_bits);
 		offset >>= (outer_bits+inner_bits);
+		//offset = ((uintptr_t) va) & ((1 << offset_bits) - 1);
 		if(offset) return;
 		
 		int page_bit = (uintptr_t) va / PGSIZE + i;
@@ -429,18 +462,20 @@ void put_value(void *va, void *val, int size) {
     /* HINT: Using the virtual address and translate(), find the physical page. Copy
      * the contents of "val" to a physical page. NOTE: The "size" value can be larger 
      * than one page. Therefore, you may have to find multiple pages using translate()
-     * function.
+     * function. 00000000110
      */
 	int offset = (uintptr_t)va << (outer_bits+inner_bits);
 	offset >>= (outer_bits+inner_bits);
-	if(offset) return;
-
+	// //if(offset) return;
+	// int offset = ((uintptr_t) va) & ((1 << offset_bits) - 1);
 	pthread_mutex_lock(&mutex);
 	void *physical_address = translate(outer_directory_table, va);
 
 	// invalid virtual address
-	if(!get_bit_at_index(virtual_address_bitmap, ((uintptr_t) va) / PGSIZE))
+	if(!get_bit_at_index(virtual_address_bitmap, ((uintptr_t) va) / PGSIZE)){
+		pthread_mutex_unlock(&mutex);
 		return;
+	}
 
 	int remaining_in_page = PGSIZE - offset;
 	if(size <= remaining_in_page) {
@@ -482,15 +517,16 @@ void get_value(void *va, void *val, int size) {
 
 	int offset = (uintptr_t)va << (outer_bits+inner_bits);
 	offset >>= (outer_bits+inner_bits);
-	if(offset) return;
-
+	// //if(offset) return;
+	// int offset = ((uintptr_t) va) & ((1 << offset_bits) - 1);	
 	pthread_mutex_lock(&mutex);
 	void *physical_address = translate(outer_directory_table, va);
 
 	// invalid virtual address
-	if(!get_bit_at_index(virtual_address_bitmap, ((uintptr_t) va) / PGSIZE))
+	if(!get_bit_at_index(virtual_address_bitmap, ((uintptr_t) va) / PGSIZE)){
+		pthread_mutex_unlock(&mutex);
 		return;
-
+	}
 	int remaining_in_page = PGSIZE - offset;
 	if(size <= remaining_in_page) {
 		memcpy(val, physical_address, size);
@@ -554,7 +590,9 @@ void mat_mult(void *mat1, void *mat2, int size, void *answer) {
             int address_c = (unsigned int)answer + ((i * size * sizeof(int))) + (j * sizeof(int));
             // printf("This is the c: %d, address: %x!\n", c, address_c);
             put_value((void *)address_c, (void *)&c, sizeof(int));
+			// printf("%d ", c);
         }
+		// printf("\n");
     }
 }
 

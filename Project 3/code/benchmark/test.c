@@ -15,6 +15,7 @@ int main() {
     void *b = t_malloc(ARRAY_SIZE);
     void *c = t_malloc(ARRAY_SIZE);
     int x = 1;
+	//int x2 = 1;
     int y, z;
     int i =0, j=0;
     int address_a = 0, address_b = 0;
@@ -29,7 +30,12 @@ int main() {
             address_b = (unsigned int)b + ((i * SIZE * sizeof(int))) + (j * sizeof(int));
             put_value((void *)address_a, &x, sizeof(int));
             put_value((void *)address_b, &x, sizeof(int));
+
+			get_value((void *)address_a, &y, sizeof(int));
+            get_value( (void *)address_b, &z, sizeof(int));
+            printf("%d(%d, %d) ", x, y, z);
         }
+		        printf("\n");
     } 
 
     printf("Fetching matrix elements stored in the arrays\n");
@@ -40,7 +46,7 @@ int main() {
             address_b = (unsigned int)b + ((i * SIZE * sizeof(int))) + (j * sizeof(int));
             get_value((void *)address_a, &y, sizeof(int));
             get_value( (void *)address_b, &z, sizeof(int));
-            printf("%d ", y);
+            printf("%d(%d) ", y, z);
         }
         printf("\n");
     } 
