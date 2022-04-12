@@ -6,6 +6,7 @@ int outer_bits;
 int inner_bits;
 int offset_bits;
 char *directory_bitmap;
+char *table_bitmap;
 char **page_tables_bitmap;
 
 /*
@@ -34,14 +35,7 @@ void set_physical_mem() {
 	physical_address_bitmap = (char *) malloc(total_frames / 8);
 	directory_bitmap = (char *) malloc(outer_directory_size / 8);
 	page_tables_bitmap = (char **) malloc(outer_directory_size / 8);
-	
-	
-	// for(int i = 0; i < outer_directory_size; i++) {
-	// 	outer_directory_table[i] = -1;
-	// }
-
-
-	
+	table_bitmap = (char *) malloc(outer_directory_size / 8);
 	pthread_mutex_init(&mutex, NULL);
 }
 
@@ -188,57 +182,35 @@ pte_t *translate(pde_t *pgdir, void *va) {
     * Part 2 HINT: Check the TLB before performing the translation. If
     * translation exists, then you can return physical address from the TLB.
     */
-    uintptr_t virtual_address = (uintptr_t) va;
-    int offset = virtual_address & ((1 << offset_bits) -1);
+    int offset = (uintptr_t)va << (outer_bits+inner_bits);
+	offset >>= (outer_bits+inner_bits);
+
     //Since we are checking before instead of after performing numerous operations we save some runtime.
-    // if(check_TLB(va) != NULL) {
+    // pte_t *tlb_translation = check_TLB(va);
+	// if(tlb_translation != NULL) {
     //     //if found then return
-    // 	return (pte_t *) ((char *) check_TLB(va) + offset);
-      
+    // 	return tlb_translation + offset;
     // } else {
         //create the physical address and add it to the TLB since it was not found, TLB miss (incremented in add_tlb)
-	    int outer_index = (uintptr_t)virtual_address >> offset_bits;
+	    int outer_index = (uintptr_t)va >> offset_bits;
 		outer_index >>= inner_bits;
 
-		int inner_index = (uintptr_t)virtual_address <<outer_bits;
-		inner_index >>= offset_bits;
-		inner_index >>= outer_bits;
-
-		//  offset = (uintptr_t)va << (outer_bits+inner_bits);
-		// offset >>= (outer_bits+inner_bits);
+		int inner_index = (uintptr_t)va <<outer_bits;
+		inner_index >>= (outer_bits+offset_bits);
 
 		pde_t directory = outer_directory_table[outer_index];
 		pte_t *page_table = inner_page_tables[directory];
-		pte_t page = page_table[inner_index];
-
-		// int firstLevel = virtual_address & ((1 << offset_bits) - 1);
-        // int secondLevelIndex = virtual_address >> (32 - outer_bits);
-		// int page_table_index = (virtual_address >> offset_bits) & ((1 << (inner_bits)) - 1);
-		// pde_t *page_table = inner_page_tables[pgdir[secondLevelIndex]];
-		// pte_t index = page_table[page_table_index];
-		// int directory_index = ptr >> (32 - directory_bits);
-		// pte_t *table = page_tables[pgdir[directory_index]];
-		
-		// int table_index = (ptr >> offset_bits) & ((1 << (page_bits)) - 1);
-		// pte_t index = table[table_index];
-		// void *pa = memory + index * PGSIZE + offset;
-		
+		pte_t page = page_table[inner_index];		
 		
 		//pte_t *pa = physical_memory[page * PGSIZE] + (pte_t *)offset; 
 
 		void *pa = page * PGSIZE + physical_memory + offset; 
 		
-		//add_TLB(va, pa);
+		add_TLB(va, pa);
         
 		return (pte_t *) pa;
     	
     // }
-
-
-
-
-
-    // //If translation not successful, then return NULL
     // return NULL; 
 }
 
@@ -265,15 +237,15 @@ int page_map(pde_t *pgdir, void *va, void *pa)
 	pde_t directory = outer_directory_table[outer_index];
 	pte_t *table = inner_page_tables[directory];
 	// table not initialized yet, malloc and set all entries to -1
-	if(table == NULL) {
+	if(!get_bit_at_index(table_bitmap, outer_bits)) {
+		set_bit_at_index(table_bitmap, outer_bits);
 		inner_page_tables[directory] = (pte_t *) malloc(sizeof(pte_t) * inner_table_size);
+		page_tables_bitmap[directory] = (char *) malloc(inner_table_size / 8);
 		table = inner_page_tables[directory];
 		
-		for(int i = 0; i < inner_table_size; i++)
-			table[i] = -1;
 	}
-	
-	if(table[inner_index] == -1) {
+	if(!get_bit_at_index(table_bitmap[directory], inner_index)){
+		set_bit_at_index(table_bitmap[directory], inner_index);
 		table[inner_index] = ((char *) pa - physical_memory) / PGSIZE;
 		return 1;
 	}
@@ -372,19 +344,20 @@ void *t_malloc(unsigned int num_bytes) {
     if(!get_bit_at_index(directory_bitmap, outer_index)) {
 		for(int i = 0; i < outer_directory_size && inner_index == -1; i++) {
 			pte_t *inner_table = inner_page_tables[i];
+			char * inner_table_bitmap = page_tables_bitmap[i];
 			for(int j = 0; j <= inner_table_size - pages_required; j++) {
 				int space = 0;				
 				for(int k = 0; k < pages_required; k++) {
-					if(inner_table[j + k] != -1) {
+					if(inner_table[j + k] == -1) {
 						space++;
-						break;
+						if(space == pages_required) {
+							outer_directory_table[outer_index] = i-1;
+							set_bit_at_index(directory_bitmap, outer_index);
+							break;
+						}
 					}
 				}
-				if(space == pages_required) {
-					outer_directory_table[outer_index] = i-1;
-					set_bit_at_index(directory_bitmap, outer_index);
-					break;
-				}
+				
 			}
 		}
 	}
