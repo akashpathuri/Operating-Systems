@@ -36,23 +36,21 @@ struct tlb {
     * Think about the size of each TLB entry that performs virtual to physical
     * address translation.
     */
-    void* virtAddr;
-    void* physAddr;
-    int index; //index in the linked list of the current tlb entry
-    int age; // represents if this entry is used or not, the larger it is the older.
-   // int page_number; // possibly represents directory number  
-   // pte_t frame; // frame number of current entry as a page table entry 
-    struct tlb *link; //next item in linked list
-};
+    void* virtual;
+    void* physical;
+    int least_used; // represents if this entry is used or not, the larger it is the older.
+
+}tlb;
 struct tlb *tlb_store;
 
-pthread_mutex_t mutex;
+// pthread_mutex_t mutex;
 char *physical_memory;
 pde_t *outer_directory_table;
 pte_t **inner_page_tables;
-int total_frames;
+int total_pages;
 char *virtual_address_bitmap;
 char *physical_address_bitmap;
+char *tlb_bitmap;
 double checks;
 double misses;
 

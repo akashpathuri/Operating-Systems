@@ -1,6 +1,6 @@
 #include "../my_vm.h"
 #include <time.h>
-#define num_threads 5
+#define num_threads 3
 
 void *pointers[num_threads];
 int ids[num_threads];
@@ -11,6 +11,7 @@ int matrix_size = 5;
 void *alloc_mem(void *id_arg) {
     int id = *((int *)id_arg);
     pointers[id] = t_malloc(alloc_size);
+	//printf("virtual address %x\n", (int)pointers[id]);
     return NULL;
 }
 
@@ -21,8 +22,12 @@ void *put_mem(void *id_arg) {
         for (int j = 0; j < matrix_size; j++) {
             int address_a = (unsigned int)va_pointer + ((i * matrix_size * sizeof(int))) + (j * sizeof(int));
             put_value((void *)address_a, &val, sizeof(int));
+			// int getting;
+			// get_value((void *)address_a, &getting, sizeof(int));
+			// printf("%d ",getting);
 	    //val++;
         }
+		// printf("\n");
     }
     return NULL;
 }
