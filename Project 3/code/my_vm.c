@@ -1,48 +1,53 @@
 #include "my_vm.h"
 
+#define DEBUG 0
+
 int outer_directory_size;
 int inner_table_size;
 int outer_bits;
 int inner_bits;
 int offset_bits;
 char *directory_bitmap;
-char **page_tables_bitmap;
+char *table_bitmap;
+int total_frames;
+
 
 /*
 Function responsible for allocating and setting your physical memory 
 */
-void set_physical_mem() {
 
-    //Allocate physical memory using mmap or malloc; this is the total size of
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void set_physical_mem() {
+	//Allocate physical memory using mmap or malloc; this is the total size of
     //your memory you are simulating
+
 	physical_memory = mmap(NULL, MEMSIZE, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
 
-    
     //HINT: Also calculate the number of physical and virtual pages and allocate
     //virtual and physical bitmaps and initialize them
 	offset_bits = (int)log2(PGSIZE);
-	int virtual_page_bits = 32-offset_bits;
+	int address_bits = (int)log2(MAX_MEMSIZE);
+	int virtual_page_bits = address_bits-offset_bits;
 	outer_bits = virtual_page_bits/2;
-	inner_bits = 32-offset_bits-outer_bits;
+	inner_bits = address_bits-offset_bits-outer_bits;
 
 	outer_directory_size = 1<<outer_bits;
 	inner_table_size = 1<<inner_bits;
-	total_frames = outer_directory_size * inner_table_size;
+	total_pages = outer_directory_size * inner_table_size;
 	outer_directory_table = (pde_t *) malloc(sizeof(pde_t) * outer_directory_size);
 	inner_page_tables = (pte_t **) malloc(sizeof(pte_t *) * outer_directory_size);
-	virtual_address_bitmap = (char *) malloc(total_frames / 8);
-	physical_address_bitmap = (char *) malloc(total_frames / 8);
+	
+	virtual_address_bitmap = (char *) malloc(total_pages / 8);
 	directory_bitmap = (char *) malloc(outer_directory_size / 8);
-	page_tables_bitmap = (char **) malloc(outer_directory_size / 8);
+	table_bitmap = (char *) malloc(outer_directory_size / 8);
+	total_frames = MEMSIZE/PGSIZE;
+	physical_address_bitmap = (char *) malloc(total_frames / 8);
 	
-	
-	// for(int i = 0; i < outer_directory_size; i++) {
-	// 	outer_directory_table[i] = -1;
-	// }
-
-
-	
-	pthread_mutex_init(&mutex, NULL);
+	tlb_store = malloc(sizeof(struct tlb)*TLB_ENTRIES);
+	tlb_bitmap = (char *) malloc(TLB_ENTRIES / 8);
+	checks = 0;
+	misses = 0;
 }
 
 
@@ -50,130 +55,81 @@ void set_physical_mem() {
  * Part 2: Add a virtual to physical page translation to the TLB.
  * Feel free to extend the function arguments or return type.
  */
-int add_TLB(void *va, void *pa)
-{
-    struct tlb *ptr_tlb;
-    
-    if(tlb_store == NULL) { //Checking if any tlb entries exist
-    	tlb_store = malloc(sizeof(struct tlb));
-    	tlb_store->index = 0;
-    	ptr_tlb = tlb_store;
-    }
-    //the average case is when 1 or more entries exist meaning we must traverse til the end of the linked list
-	for(ptr_tlb = tlb_store; ptr_tlb->link != NULL; ptr_tlb = ptr_tlb->link) {}
-	if(ptr_tlb->index!=TLB_ENTRIES){
-        ptr_tlb->link = malloc(sizeof(struct tlb));
-        ptr_tlb->link->index = ptr_tlb->index + 1;
-        ptr_tlb = ptr_tlb->link;
-        ptr_tlb->physAddr = pa;
-        ptr_tlb->virtAddr = va;
-        ptr_tlb->age = 0;
-    //	ptr_tlb->page_number = ((uintptr_t) va) >> offset_bits;
-    //	ptr_tlb->frame = ((char *) pa - physical_memory) / PGSIZE;
-   	    ptr_tlb->link = NULL;
-    }
-    
-   	// find a TLB entry to replace
-   	else{
-   		int maxAge = 0;
-   		int maxAge_index = 0;
-   		
-   		// find the max age value
-        ptr_tlb = tlb_store;
-   		while(ptr_tlb != NULL) {
-   			if(ptr_tlb->age > maxAge) {
-   				maxAge = ptr_tlb->age;
-   				maxAge_index = ptr_tlb->index;
-   			}
-            ptr_tlb = ptr_tlb->link;
-   		}
-   		
-   		// replace the entry from the linked list with updated data
-   		if(maxAge_index == 0) {
-   			tlb_store->age = 0;
-            tlb_store->virtAddr = va;
-            tlb_store->physAddr = pa;
-   		} else {
-            //if it is not the first element in the list, we must increment to the maxAge_index and replace the oldest entry
-			for(ptr_tlb = tlb_store; ptr_tlb != NULL; ptr_tlb = ptr_tlb->link) {
-	   			if(ptr_tlb->index == maxAge_index) {
-	   				ptr_tlb->age = 0;
-                    ptr_tlb->virtAddr = va;
-                    ptr_tlb->physAddr = pa;
-	   				break;
-	   			}
-	   		}
-   		}
-   		
-   		// lower the index of each TLB entry after the removed entry
-   		// while(ptr_tlb != NULL) {
-   		// 	tlb->index--;
-   		// 	tlb = tlb->next;
-   		// }
-   	}
-
-    return -1;
+int add_TLB(void *va, void *pa){
+	if(tlb_store == NULL){
+		tlb_store = malloc(sizeof(struct tlb)*TLB_ENTRIES);
+		tlb_bitmap = (char *) malloc(TLB_ENTRIES / 8);
+	}
+	//If va already exists but is hidden because of empty indices beforehand
+	for(int x = 0; x<TLB_ENTRIES; x++){
+		if(get_bit_at_index(tlb_bitmap,x) && tlb_store[x].virtual == va){
+			tlb_store[x].least_used = 0;
+			tlb_store[x].virtual = va;
+			tlb_store[x].physical = pa;
+			return 1;
+		}
+	}
+	//Avg case when size < tlb entries and size >=1
+	for(int x = 0; x<TLB_ENTRIES; x++){
+		if(!get_bit_at_index(tlb_bitmap,x)){
+			set_bit_at_index(tlb_bitmap,x);
+			tlb_store[x].virtual = va;
+			tlb_store[x].physical = pa;
+			tlb_store[x].least_used = 0;
+			return 1;
+		}
+	}
+	// If it gets past the previous loop, tlb is maxed out so we proceed to eviction policy
+	int maxage = 0;
+	int maxindex = 0;
+	for(int x = 0; x<TLB_ENTRIES; x++){
+		if(tlb_store[x].least_used > maxage){
+			maxage = tlb_store[x].least_used;
+			maxindex = x;
+		}
+	}
+	tlb_store[maxindex].virtual = va;
+	tlb_store[maxindex].physical = pa;
+	tlb_store[maxindex].least_used = 0;
+	return 1;
 }
-
-
 /*
  * Part 2: Check TLB for a valid translation.
  * Returns the physical page address.
  * Feel free to extend this function and change the return type.
  */
-pte_t *check_TLB(void *va) {
-
-    /* Part 2: TLB lookup code here */
-    checks++;
-
-	if(tlb_store == NULL) {
-		misses++;
-		return NULL;
+void* check_TLB(void* va){
+	checks++;
+	for(int x = 0; x<TLB_ENTRIES; x++){
+		if(get_bit_at_index(tlb_bitmap, x) && tlb_store[x].virtual == va){
+			tlb_store[x].least_used = 0;
+			return tlb_store[x].physical;
+		}
+	    tlb_store[x].least_used++; //increment least_used when index is not the target 
 	}
-
-	struct tlb *ptr_tlb; 
-	
-	for(ptr_tlb = tlb_store; ptr_tlb != NULL; ptr_tlb = tlb_store->link) {
-		if(ptr_tlb->virtAddr == va) {
-			ptr_tlb->age = 0;
-            return ptr_tlb->physAddr;
-            
-		} else {
-			// increment last_used of every other TLB entry
-			ptr_tlb->age++;
-    	}
-	
-	
-	}
-    //If it has reached here then it could not find it, meaning we return null and increment misses.
-	
 	misses++;
-	
 	return NULL;
-
-
-
-
-
 }
-
-
 /*
  * Part 2: Print TLB miss rate.
  * Feel free to extend the function arguments or return type.
  */
-void print_TLB_missrate()
-{
-    double miss_rate = 0;	
-
+void print_TLB_missrate(){
     /*Part 2 Code here to calculate and print the TLB miss rate*/
-
-    miss_rate =  misses/checks; 
-
-
-    fprintf(stderr, "TLB miss rate %lf \n", miss_rate);
+    fprintf(stderr, "TLB miss rate %lf \n", misses/checks);
 }
 
+void print_TLB(){
+	for(int x = 0; x<TLB_ENTRIES; x++){
+		if(get_bit_at_index(tlb_bitmap, x)){
+			printf("(%p,%p)\t",tlb_store[x].virtual, tlb_store[x].physical);
+		}else{
+			printf("NULL\t");
+		}
+	}
+	printf("\n");
+	
+}
 
 
 /*
@@ -188,60 +144,38 @@ pte_t *translate(pde_t *pgdir, void *va) {
     * Part 2 HINT: Check the TLB before performing the translation. If
     * translation exists, then you can return physical address from the TLB.
     */
-    uintptr_t virtual_address = (uintptr_t) va;
-    int offset = virtual_address & ((1 << offset_bits) -1);
-    //Since we are checking before instead of after performing numerous operations we save some runtime.
-    // if(check_TLB(va) != NULL) {
-    //     //if found then return
-    // 	return (pte_t *) ((char *) check_TLB(va) + offset);
-      
-    // } else {
+	
+    int offset = (uintptr_t)va << (outer_bits+inner_bits);
+	offset >>= (outer_bits+inner_bits);
+	pte_t virtual_wo_offset = (uintptr_t)va >> offset_bits;
+	virtual_wo_offset <<= offset_bits;
+	void* tlb_translation = check_TLB((void*)virtual_wo_offset);
+	//checking if translation already exists
+	if(tlb_translation != NULL) {
+        //if found then return
+		return (pte_t *)(tlb_translation+offset);
+    } else {
         //create the physical address and add it to the TLB since it was not found, TLB miss (incremented in add_tlb)
-	    int outer_index = (uintptr_t)virtual_address >> offset_bits;
-		outer_index >>= inner_bits;
+	    int outer_index = (uintptr_t)va >> (inner_bits+offset_bits);
 
-		int inner_index = (uintptr_t)virtual_address <<outer_bits;
-		inner_index >>= offset_bits;
-		inner_index >>= outer_bits;
-
-		//  offset = (uintptr_t)va << (outer_bits+inner_bits);
-		// offset >>= (outer_bits+inner_bits);
+		int inner_index = (uintptr_t)va <<outer_bits;
+		inner_index >>= (outer_bits+offset_bits);
 
 		pde_t directory = outer_directory_table[outer_index];
 		pte_t *page_table = inner_page_tables[directory];
-		pte_t page = page_table[inner_index];
+		pte_t frame = page_table[inner_index];
 
-		// int firstLevel = virtual_address & ((1 << offset_bits) - 1);
-        // int secondLevelIndex = virtual_address >> (32 - outer_bits);
-		// int page_table_index = (virtual_address >> offset_bits) & ((1 << (inner_bits)) - 1);
-		// pde_t *page_table = inner_page_tables[pgdir[secondLevelIndex]];
-		// pte_t index = page_table[page_table_index];
-		// int directory_index = ptr >> (32 - directory_bits);
-		// pte_t *table = page_tables[pgdir[directory_index]];
-		
-		// int table_index = (ptr >> offset_bits) & ((1 << (page_bits)) - 1);
-		// pte_t index = table[table_index];
-		// void *pa = memory + index * PGSIZE + offset;
-		
-		
-		//pte_t *pa = physical_memory[page * PGSIZE] + (pte_t *)offset; 
+		void *pa = frame * PGSIZE + physical_memory ; 
 
-		void *pa = page * PGSIZE + physical_memory + offset; 
-		
-		//add_TLB(va, pa);
-        
+		add_TLB((void*)virtual_wo_offset, pa);
+		if(DEBUG)
+			print_TLB();
+		pa+=offset;
 		return (pte_t *) pa;
     	
-    // }
-
-
-
-
-
-    // //If translation not successful, then return NULL
-    // return NULL; 
+    }
+    return NULL; 
 }
-
 
 
 /*
@@ -250,9 +184,8 @@ as an argument, and sets a page table entry. This function will walk the page
 directory to see if there is an existing mapping for a virtual address. If the
 virtual address is not present, then a new entry will be added
 */
-int page_map(pde_t *pgdir, void *va, void *pa)
-{
-
+int page_map(pde_t *pgdir, void *va, void *pa){	
+	
     /*HINT: Similar to translate(), find the page directory (1st level)
     and page table (2nd-level) indices. If no mapping exists, set the
     virtual to physical mapping */
@@ -264,42 +197,37 @@ int page_map(pde_t *pgdir, void *va, void *pa)
 
 	pde_t directory = outer_directory_table[outer_index];
 	pte_t *table = inner_page_tables[directory];
-	// table not initialized yet, malloc and set all entries to -1
-	if(table == NULL) {
+	if(!get_bit_at_index(table_bitmap, outer_index)) {
+		set_bit_at_index(table_bitmap, outer_index);
 		inner_page_tables[directory] = (pte_t *) malloc(sizeof(pte_t) * inner_table_size);
 		table = inner_page_tables[directory];
 		
-		for(int i = 0; i < inner_table_size; i++)
-			table[i] = -1;
 	}
+	table[inner_index] = ((char *) pa - physical_memory) / PGSIZE;
 	
-	if(table[inner_index] == -1) {
-		table[inner_index] = ((char *) pa - physical_memory) / PGSIZE;
-		return 1;
-	}
-
-    return -1;
+	return 1;
 }
 
 
 /*Function that gets the next available page
 */
-void *get_next_avail(int num_pages) {
+void *get_next_avail(int num_pages){
  
     //Use virtual address bitmap to find the next free page
-	for(int x = 0; x<total_frames; x++){
+	for(int x = 1; x<=total_pages-num_pages; x++){
 		int enoughtSpace = 0;
-		for(int y = x; y < num_pages+x; y++) {
-			if(!get_bit_at_index(virtual_address_bitmap, y)) {
+		for(int y = 0; y < num_pages; y++) {
+			if(!get_bit_at_index(virtual_address_bitmap, x+y)) {
 				enoughtSpace++;
 			}
-		}
-		if(enoughtSpace == num_pages ){
-			for(int y = x; y < num_pages+x; y++) {
-				set_bit_at_index(virtual_address_bitmap, y);
+			if(enoughtSpace == num_pages){
+				for(int z = x; z < num_pages+x; z++) {
+					set_bit_at_index(virtual_address_bitmap, z);
+				}
+				return (void *) (x*PGSIZE);
 			}
-			return (void *) (x*PGSIZE);
 		}
+		
 	}
 	return NULL;
 }
@@ -322,6 +250,7 @@ int get_bit_at_index(char *bitmap, int index){
     return bit >> (index%8);
 }
 
+
 /* Function responsible for allocating pages
 and used by the benchmark
 */
@@ -330,6 +259,10 @@ void *t_malloc(unsigned int num_bytes) {
     /* 
      * HINT: If the physical memory is not yet initialized, then allocate and initialize.
      */
+	pthread_mutex_lock(&mutex);
+   	if(physical_memory == NULL){
+		set_physical_mem();
+	}
 
    /* 
     * HINT: If the page directory is not initialized, then initialize the
@@ -338,65 +271,29 @@ void *t_malloc(unsigned int num_bytes) {
 	* set the bitmaps and map a new page. Note, you will 
     * have to mark which physical pages are used. 
     */
-   	//pthread_mutex_lock(&mutex);
-	// if(physical_memory == NULL){
-	// 	pthread_mutex_init(&mutex, NULL);
-	// 	pthread_mutex_lock(&mutex);
-	// 	set_physical_mem();
-	// }else {
-	// 	pthread_mutex_lock(&mutex);
-	// }
-   	if(physical_memory == NULL)
-		set_physical_mem();
-
-   	pthread_mutex_lock(&mutex);
-	
 	int pages_required = num_bytes/PGSIZE;
-	if(num_bytes%PGSIZE >0)
+	if(num_bytes%PGSIZE){
 		pages_required++;
-	
-	void *virtual_address = get_next_avail(pages_required);
-	if(virtual_address== NULL){
-		pthread_mutex_unlock(&mutex);
-		return NULL;
 	}
-		
-    
-    int outer_index = (uintptr_t)virtual_address >> offset_bits;
-	outer_index >>= inner_bits;
 
-    int inner_index = (uintptr_t)virtual_address <<outer_bits;
-    inner_index >>= offset_bits;
-	inner_index >>= outer_bits;
+	void *virtual_address = get_next_avail(pages_required);
+
+    int outer_index = (uintptr_t)virtual_address >> (inner_bits+offset_bits);
     
     if(!get_bit_at_index(directory_bitmap, outer_index)) {
-		for(int i = 0; i < outer_directory_size && inner_index == -1; i++) {
-			pte_t *inner_table = inner_page_tables[i];
-			for(int j = 0; j <= inner_table_size - pages_required; j++) {
-				int space = 0;				
-				for(int k = 0; k < pages_required; k++) {
-					if(inner_table[j + k] != -1) {
-						space++;
-						break;
-					}
-				}
-				if(space == pages_required) {
-					outer_directory_table[outer_index] = i-1;
-					set_bit_at_index(directory_bitmap, outer_index);
-					break;
-				}
-			}
+		set_bit_at_index(directory_bitmap, outer_index);
+		outer_directory_table[outer_index] = outer_index;
 		}
-	}
 	
 	// find an available frame for each page and map them together
-	for(int i = 0; i < pages_required; i++) {
-		for(int j = 0; j < total_frames; j++) {
-			if(!get_bit_at_index(physical_address_bitmap, j)) {
-				set_bit_at_index(physical_address_bitmap, j);
-				page_map(outer_directory_table, virtual_address + i * PGSIZE, physical_memory + j * PGSIZE);
+	int page_to_map = 0;
+	for(int i = 0; i < total_frames; i++) {
+		if(!get_bit_at_index(physical_address_bitmap, i)) {
+			set_bit_at_index(physical_address_bitmap, i);
+			page_map(outer_directory_table, virtual_address+(page_to_map*PGSIZE), physical_memory+(i*PGSIZE));
+			page_to_map++;
+			if(page_to_map == pages_required)
 				break;
-			}
 		}
 	}
 
@@ -404,34 +301,31 @@ void *t_malloc(unsigned int num_bytes) {
     return virtual_address;
 }
 
+
 /* Responsible for releasing one or more memory pages using virtual address (va)
 */
 void t_free(void *va, int size) {
-
     /* Part 1: Free the page table entries starting from this virtual address
      * (va). Also mark the pages free in the bitmap. Perform free only if the 
      * memory from "va" to va+size is valid.
      *
      * Part 2: Also, remove the translation from the TLB
      */
+	int offset = (uintptr_t)va << (outer_bits+inner_bits);
+	offset >>= (outer_bits+inner_bits);
+	if(offset) return;
+
     int page_count = size/PGSIZE;
 	if(size%PGSIZE >0)
 		page_count++;
-	
-	for(int i = 0; i < page_count; i++) {
-		int outer_index = (uintptr_t)va >> offset_bits;
-		outer_index >>= inner_bits;
 
+	for(int x = 0; x < page_count; x++) {
+		va =  va + (x * PGSIZE);
+		int outer_index = (uintptr_t)va >> (outer_bits+offset_bits);
 		int inner_index = (uintptr_t)va <<outer_bits;
-		inner_index >>= offset_bits;
-		inner_index >>= outer_bits;
-    	
-		int offset = (uintptr_t)va << (outer_bits+inner_bits);
-		offset >>= (outer_bits+inner_bits);
-		//offset = ((uintptr_t) va) & ((1 << offset_bits) - 1);
-		if(offset) return;
-		
-		int page_bit = (uintptr_t) va / PGSIZE + i;
+		inner_index >>= (outer_bits+offset_bits);
+		int page_bit = (uintptr_t) va / PGSIZE + x;
+
 		
 		pthread_mutex_lock(&mutex);
 		if(get_bit_at_index(virtual_address_bitmap, page_bit)){
@@ -440,15 +334,20 @@ void t_free(void *va, int size) {
 			pde_t directory = outer_directory_table[outer_index];
 			pte_t *table = inner_page_tables[directory];
 			int frame = table[inner_index];
-			table[inner_index] = -1;
+		
 			if(get_bit_at_index(physical_address_bitmap, frame))
 				clear_bit_at_index(physical_address_bitmap, frame);
-			
-			pthread_mutex_unlock(&mutex);
-		} else { // pointing to unused page, invalid pointer
-			pthread_mutex_unlock(&mutex);
-			return;
+
+		} 
+		for(int y = 0; y<TLB_ENTRIES; y++){
+			if(get_bit_at_index(tlb_bitmap, y) && tlb_store[y].virtual==va){
+				clear_bit_at_index(tlb_bitmap, y);
+				tlb_store[y].virtual = NULL;
+				tlb_store[y].physical = NULL;
+				tlb_store[y].least_used = 0;
+			}
 		}
+		pthread_mutex_unlock(&mutex);
     }
 }
 
@@ -462,48 +361,50 @@ void put_value(void *va, void *val, int size) {
     /* HINT: Using the virtual address and translate(), find the physical page. Copy
      * the contents of "val" to a physical page. NOTE: The "size" value can be larger 
      * than one page. Therefore, you may have to find multiple pages using translate()
-     * function. 00000000110
+     * function. 
      */
 	int offset = (uintptr_t)va << (outer_bits+inner_bits);
 	offset >>= (outer_bits+inner_bits);
-	// //if(offset) return;
-	// int offset = ((uintptr_t) va) & ((1 << offset_bits) - 1);
-	pthread_mutex_lock(&mutex);
-	void *physical_address = translate(outer_directory_table, va);
+	int page_bit = ((uintptr_t) va) / PGSIZE;
 
-	// invalid virtual address
-	if(!get_bit_at_index(virtual_address_bitmap, ((uintptr_t) va) / PGSIZE)){
+	pthread_mutex_lock(&mutex);
+	if(!get_bit_at_index(virtual_address_bitmap, page_bit)){
 		pthread_mutex_unlock(&mutex);
 		return;
 	}
+	void *physical_address = translate(outer_directory_table, va);
 
-	int remaining_in_page = PGSIZE - offset;
-	if(size <= remaining_in_page) {
+	int rest_of_page = (PGSIZE - offset);
+	if(size <= rest_of_page) {
 		memcpy(physical_address, val, size);
-	} else {
-		memcpy(physical_address, val, remaining_in_page);
-		size -= remaining_in_page;
-		va += remaining_in_page;
-		val += remaining_in_page;
-		
-		while(size > 0) {
-			if(!get_bit_at_index(virtual_address_bitmap, ((uintptr_t) va) / PGSIZE)) return;
-		
-			physical_address = translate(outer_directory_table, va);
-			
-			if(size % PGSIZE == 0) {
-				memcpy(physical_address, val, PGSIZE);
-			} else {
-				memcpy(physical_address, val, size % PGSIZE);
-			}
-			
-			size -= PGSIZE;
-			va += PGSIZE;
-			val += PGSIZE;
-		}
+		pthread_mutex_unlock(&mutex);
+		return;
+	}else{
+		memcpy(physical_address, val, rest_of_page);
+		size-=rest_of_page;
 	}
-	
-	pthread_mutex_unlock(&mutex);
+
+	va += rest_of_page;
+	val += rest_of_page;
+	while(size>PGSIZE){
+		if(!get_bit_at_index(virtual_address_bitmap, ((uintptr_t) va) / PGSIZE)){
+			pthread_mutex_unlock(&mutex);
+			return;
+		} 
+		physical_address = translate(outer_directory_table, va);
+		memcpy(physical_address, val, PGSIZE);
+		size -= PGSIZE;
+		va += PGSIZE;
+		val += PGSIZE;
+	}
+
+	if(!get_bit_at_index(virtual_address_bitmap, ((uintptr_t) va) / PGSIZE)){
+		pthread_mutex_unlock(&mutex);
+		return;
+	} 
+	physical_address = translate(outer_directory_table, va);
+	memcpy(physical_address, val, size);
+	pthread_mutex_unlock(&mutex);	
 
 }
 
@@ -517,47 +418,49 @@ void get_value(void *va, void *val, int size) {
 
 	int offset = (uintptr_t)va << (outer_bits+inner_bits);
 	offset >>= (outer_bits+inner_bits);
-	// //if(offset) return;
-	// int offset = ((uintptr_t) va) & ((1 << offset_bits) - 1);	
-	pthread_mutex_lock(&mutex);
-	void *physical_address = translate(outer_directory_table, va);
+	int page_bit = ((uintptr_t) va) / PGSIZE;
 
-	// invalid virtual address
-	if(!get_bit_at_index(virtual_address_bitmap, ((uintptr_t) va) / PGSIZE)){
+	pthread_mutex_lock(&mutex);
+	if(!get_bit_at_index(virtual_address_bitmap, page_bit)){
 		pthread_mutex_unlock(&mutex);
 		return;
 	}
-	int remaining_in_page = PGSIZE - offset;
-	if(size <= remaining_in_page) {
+	void *physical_address = translate(outer_directory_table, va);
+
+	int rest_of_page = (PGSIZE - offset);
+	if(size <= rest_of_page) {
 		memcpy(val, physical_address, size);
-	} else {
-		memcpy(val, physical_address, remaining_in_page);
-		size -= remaining_in_page;
-		va += remaining_in_page;
-		val += remaining_in_page;
-		
-		while(size > 0) {
-			if(!get_bit_at_index(virtual_address_bitmap, ((uintptr_t) va) / PGSIZE)) return;
-		
-			physical_address = translate(outer_directory_table, va);
-			
-			if(size % PGSIZE == 0) {
-				memcpy(val, physical_address, PGSIZE);
-			} else {
-				memcpy(val, physical_address, size % PGSIZE);
-			}
-			
-			size -= PGSIZE;
-			va += PGSIZE;
-			val += PGSIZE;
-		}
+		pthread_mutex_unlock(&mutex);
+		return;
+	}else{
+		memcpy(val, physical_address, rest_of_page);
+		size-=rest_of_page;
 	}
-	
-	pthread_mutex_unlock(&mutex);
+
+	va += rest_of_page;
+	val += rest_of_page;
+	while(size>PGSIZE){
+		if(!get_bit_at_index(virtual_address_bitmap, ((uintptr_t) va) / PGSIZE)){
+			pthread_mutex_unlock(&mutex);
+			return;
+		} 
+		physical_address = translate(outer_directory_table, va);
+		memcpy(val, physical_address, PGSIZE);
+		size -= PGSIZE;
+		va += PGSIZE;
+		val += PGSIZE;
+	}
+
+	if(!get_bit_at_index(virtual_address_bitmap, ((uintptr_t) va) / PGSIZE)){
+		pthread_mutex_unlock(&mutex);
+		return;
+	} 
+	physical_address = translate(outer_directory_table, va);
+	memcpy(val, physical_address, size);
+	pthread_mutex_unlock(&mutex);	
    
 
 }
-
 
 
 /*
@@ -590,9 +493,14 @@ void mat_mult(void *mat1, void *mat2, int size, void *answer) {
             int address_c = (unsigned int)answer + ((i * size * sizeof(int))) + (j * sizeof(int));
             // printf("This is the c: %d, address: %x!\n", c, address_c);
             put_value((void *)address_c, (void *)&c, sizeof(int));
-			// printf("%d ", c);
+			if(DEBUG){
+				int getting;
+				get_value((void *)address_c, &getting, sizeof(int));
+				printf("(%d, %d, %d)%d ", a, b, c, getting);
+			}
         }
-		// printf("\n");
+		if(DEBUG)
+			printf("\n");
     }
 }
 

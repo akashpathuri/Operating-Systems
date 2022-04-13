@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include "../my_vm.h"
 
-#define SIZE 5
+#define SIZE 6
 #define ARRAY_SIZE 400
 
 int main() {
@@ -15,7 +15,6 @@ int main() {
     void *b = t_malloc(ARRAY_SIZE);
     void *c = t_malloc(ARRAY_SIZE);
     int x = 1;
-	//int x2 = 1;
     int y, z;
     int i =0, j=0;
     int address_a = 0, address_b = 0;
@@ -33,9 +32,9 @@ int main() {
 
 			get_value((void *)address_a, &y, sizeof(int));
             get_value( (void *)address_b, &z, sizeof(int));
-            printf("%d(%d, %d) ", x, y, z);
+            // printf("%d(%d, %d) ", x, y, z);
         }
-		        printf("\n");
+		        // printf("\n");
     } 
 
     printf("Fetching matrix elements stored in the arrays\n");
@@ -46,11 +45,12 @@ int main() {
             address_b = (unsigned int)b + ((i * SIZE * sizeof(int))) + (j * sizeof(int));
             get_value((void *)address_a, &y, sizeof(int));
             get_value( (void *)address_b, &z, sizeof(int));
-            printf("%d(%d) ", y, z);
+            //printf("%d(%d) ", y, z);
+            printf("%d ", y);
         }
         printf("\n");
     } 
-
+    print_TLB_missrate();
     printf("Performing matrix multiplication with itself!\n");
     mat_mult(a, b, SIZE, c);
 
