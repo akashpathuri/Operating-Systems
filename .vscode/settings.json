@@ -5,6 +5,9 @@
 		"thread": "c",
 		"stdbool.h": "c",
 		"stdlib.h": "c",
-		"mman.h": "c"
-	}
+		"mman.h": "c",
+		"my_vm.h": "c",
+		"type_traits": "c"
+	},
+	"C_Cpp.errorSquiggles": "Disabled"
 }
