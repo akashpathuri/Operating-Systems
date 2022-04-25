@@ -23,6 +23,11 @@
 #include "rufs.h"
 
 char diskfile_path[PATH_MAX];
+unsigned char inodes_bm[MAX_INUM];
+int inode_count = 0;
+
+unsigned char block_bm[MAX_DNUM];
+int block_count = 0;
 
 // Declare your in-memory data structures here
 
@@ -36,8 +41,15 @@ int get_avail_ino() {
 	// Step 2: Traverse inode bitmap to find an available slot
 
 	// Step 3: Update inode bitmap and write to disk 
-
-	return 0;
+	for(int i= 0; i<inode_count;i++)
+	{
+		if(((inodes_bm [i / 8] >> (i % 8)) & 1) == 0)
+		{
+			return i; // havent tested yet
+		}
+	}
+	return -1;
+	//return 0;
 }
 
 /* 
