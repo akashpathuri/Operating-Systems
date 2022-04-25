@@ -5,7 +5,7 @@
   His code is licensed under the LGPLv2.
 */
 
-#include "params.h"
+#include "example.h"
 #include "block.h"
 
 #include <ctype.h>
