@@ -19,3 +19,6 @@ rufs_open
 rufs_read
 rufs_write
 rufs_unlink
+
+resource
+https://github.com/ReedKrawiec/CS416/blob/master/project4/code/tfs.c
