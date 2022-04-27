@@ -1,0 +1,21 @@
+get_avail_ino _complete
+get_avail_blkno _complete
+readi _complete
+writei _complete
+dir_find
+dir_add
+dir_remove
+get_node_by_path
+rufs_mkfs
+rufs_init
+rufs_destroy
+rufs_getattr
+rufs_opendir
+rufs_readdir
+rufs_mkdir
+rufs_rmdir
+rufs_create
+rufs_open
+rufs_read
+rufs_write
+rufs_unlink
