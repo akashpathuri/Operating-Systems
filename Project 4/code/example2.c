@@ -21,6 +21,7 @@
 #include <sys/time.h>
 #include <libgen.h>
 #include <limits.h>
+#include <math.h>
 
 #include "block.h"
 #include "example2.h"

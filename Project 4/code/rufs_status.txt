@@ -6,11 +6,11 @@ dir_find
 dir_add
 dir_remove
 get_node_by_path
-rufs_mkfs
-rufs_init
-rufs_destroy
-rufs_getattr
-rufs_opendir
+rufs_mkfs _complete
+rufs_init _complete
+rufs_destroy _complete
+rufs_getattr _complete
+rufs_opendir _complete
 rufs_readdir
 rufs_mkdir
 rufs_rmdir
@@ -20,5 +20,3 @@ rufs_read
 rufs_write
 rufs_unlink
 
-resource
-https://github.com/ReedKrawiec/CS416/blob/master/project4/code/tfs.c
