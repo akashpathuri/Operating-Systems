@@ -132,13 +132,38 @@ int writei(uint16_t ino, struct inode *inode) {
 int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *dirent) {
 
   // Step 1: Call readi() to get the inode using ino (inode number of current directory)
+	struct inode *directory_inode = malloc(sizeof(struct inode));
+	if(readi(ino, directory_inode)==-1){
+		free(directory_inode);
+		return -1;
+	}
 
   // Step 2: Get data block of current directory from inode
-
+	int *directory_data = directory_inode->direct_ptr;
   // Step 3: Read directory's data block and check each directory entry.
   //If the name matches, then copy directory entry to dirent structure
-
-	return 0;
+  	int* data_buffer = malloc(BLOCK_SIZE);
+	for(int x = 0; x<16; x++){
+		int d_ptr = directory_data[x];
+		if(d_ptr >= 0){
+			int block_number = super_block->d_start_blk;
+			block_number += d_ptr;
+			if(bio_read(block_number, data_buffer)<=0)
+				continue;
+			for(int y = 0; y<dirent_per_block; y++){
+				struct dirent *directory_entry = (struct dirent *)data_buffer+y;
+				if(directory_entry!=NULL && directory_entry->valid &&!strcmp(directory_entry->name, fname)){
+					*dirent=*directory_entry;
+					free(directory_inode);
+					free(data_buffer);
+					return d_ptr;
+				}
+			}
+		}
+	}
+	free(directory_inode);
+	free(data_buffer);
+	return -1;
 }
 
 int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t name_len) {
@@ -481,22 +506,130 @@ static int rufs_read(const char *path, char *buffer, size_t size, off_t offset, 
 		free(inode);
 		return -1;
 	}
+	int block_offset = offset/BLOCK_SIZE;
+	int data_offset = offset%BLOCK_SIZE;
+	int data_read = 0;
+	int* data_buffer = malloc(BLOCK_SIZE);
+	char *end_of_buffer = buffer;
 	// Step 2: Based on size and offset, read its data blocks from disk
-	
-	// Step 3: copy the correct amount of data from offset to buffer
+	for(int x = block_offset; x<16; x++){
+		int d_ptr = inode->direct_ptr[x];
+		if(d_ptr >= 0){
+			int block_number = super_block->d_start_blk;
+			block_number += d_ptr;
+			if(bio_read(block_number, data_buffer)<=0)
+				continue;
+			if(data_offset){
+				data_buffer+=data_offset;
+				if(size>= (BLOCK_SIZE-data_offset)){
+					memcpy(end_of_buffer,data_buffer,BLOCK_SIZE-data_offset);
+					size -= (BLOCK_SIZE-data_offset);
+					data_read += (BLOCK_SIZE-data_offset);
+					end_of_buffer += (BLOCK_SIZE-data_offset);
+					data_offset = 0;
+				}else{
+					memcpy(end_of_buffer,data_buffer,size);
+					size -= size;
+					data_read += size;
+					data_offset = 0;
+					break;
+				}
+			}
+			else{
+				if(size>= BLOCK_SIZE){
+					memcpy(end_of_buffer,data_buffer,BLOCK_SIZE);
+					size -= BLOCK_SIZE;
+					data_read += BLOCK_SIZE;
+					end_of_buffer += BLOCK_SIZE;
+				}else{
+					memcpy(end_of_buffer,data_buffer,size);
+					size -= size;
+					data_read += size;
+					break;
+				}
+			}
 
+		}
+	}
+
+
+	// Step 3: copy the correct amount of data from offset to buffer
+	if(size)
+		printf("FROM RUFS_READ: More data needs to be read");
 	// Note: this function should return the amount of bytes you copied to buffer
-	return 0;
+	free(inode);
+	free(data_buffer);
+	return data_read;
 }
 
 static int rufs_write(const char *path, const char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
-	// Step 1: You could call get_node_by_path() to get inode from path
 
 	// Step 2: Based on size and offset, read its data blocks from disk
 
 	// Step 3: Write the correct amount of data from offset to disk
 
+	// Step 1: You could call get_node_by_path() to get inode from path
+	struct inode *inode = malloc(sizeof(struct inode));
+	if(get_node_by_path(path, 0, inode)==-1){
+		free(inode);
+		return -1;
+	}
+	int block_offset = offset/BLOCK_SIZE;
+	int data_offset = offset%BLOCK_SIZE;
+	int data_write = 0;
+	int* data_buffer = malloc(BLOCK_SIZE);
+	char *end_of_buffer = (char *)buffer;
+	// Step 2: Based on size and offset, read its data blocks from disk
+	for(int x = block_offset; x<16; x++){
+		int d_ptr = inode->direct_ptr[x];
+		int block_number = super_block->d_start_blk;
+		if(d_ptr==-1){
+			inode->direct_ptr[x] = get_avail_blkno();
+			block_number += inode->direct_ptr[x];
+		}else if(d_ptr>=0){
+			block_number += d_ptr;
+			bio_read(block_number, data_buffer);
+		}
+
+		if(data_offset){
+			int *end_of_data_buffer = data_buffer;
+			end_of_data_buffer+=data_offset;
+			if(size>= (BLOCK_SIZE-data_offset)){
+				memcpy(end_of_data_buffer, end_of_buffer, BLOCK_SIZE-data_offset);
+				bio_write(block_number, data_buffer);
+				size -= (BLOCK_SIZE-data_offset);
+				data_write += (BLOCK_SIZE-data_offset);
+				end_of_buffer += (BLOCK_SIZE-data_offset);
+				data_offset = 0;
+			}else{
+				memcpy(end_of_data_buffer, end_of_buffer, size);
+				bio_write(block_number, data_buffer);
+				size -= size;
+				data_write += size;
+				data_offset = 0;
+				break;
+			}
+		}else{
+			if(size>= BLOCK_SIZE){
+				memcpy(data_buffer, end_of_buffer, BLOCK_SIZE);
+				bio_write(block_number, data_buffer);
+				size -= BLOCK_SIZE;
+				data_write += BLOCK_SIZE;
+				end_of_buffer += BLOCK_SIZE;
+			}else{
+				memcpy(data_buffer, end_of_buffer, size);
+				bio_write(block_number, data_buffer);
+				size -= BLOCK_SIZE;
+				data_write += BLOCK_SIZE;
+				break;
+			}
+		}
+		
+	}
 	// Step 4: Update the inode info and write it to disk
+	writei(inode->ino, inode);
+	free(data_buffer);
+	free(inode);
 
 	// Note: this function should return the amount of bytes you write to disk
 	return size;
@@ -505,17 +638,45 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
 static int rufs_unlink(const char *path) {
 
 	// Step 1: Use dirname() and basename() to separate parent directory path and target file name
+	char *parent_directory = dirname((char*) path);
+	char *target_file = basename((char*) path);
 
 	// Step 2: Call get_node_by_path() to get inode of target file
+	struct inode *target_inode = malloc(sizeof(struct inode));
+	if(get_node_by_path(target_file, 0, target_inode)==-1){
+		free(target_inode);
+		return -1;
+	}
 
 	// Step 3: Clear data block bitmap of target file
+	bitmap_t data_bitmap=malloc(BLOCK_SIZE);
+	bio_read(super_block->d_bitmap_blk, data_bitmap);
+	for(int x = 0 ; x<16; x++){
+		int d_ptr = target_inode->direct_ptr[x];
+		if(d_ptr >= 0 ){
+			unset_bitmap(data_bitmap, d_ptr-super_block->d_start_blk);
+		}
+	}
+	bio_write(super_block->d_bitmap_blk, data_bitmap);
+	free(data_bitmap);
 
 	// Step 4: Clear inode bitmap and its data block
+	bitmap_t inode_bitmap=malloc(BLOCK_SIZE);
+	bio_read(super_block->i_bitmap_blk, inode_bitmap);
+	unset_bitmap(inode_bitmap, target_inode->ino);
+	bio_write(super_block->i_bitmap_blk, inode_bitmap);
+	free(inode_bitmap);
+	free(target_inode);
 
 	// Step 5: Call get_node_by_path() to get inode of parent directory
-
+	struct inode *parent_inode = malloc(sizeof(struct inode));
+	if(get_node_by_path(parent_directory, 0, parent_inode)==-1){
+		free(parent_inode);
+		return -1;
+	}
 	// Step 6: Call dir_remove() to remove directory entry of target file in its parent directory
-
+	dir_remove(*parent_inode, target_file, strlen(target_file));
+	free(parent_inode);
 	return 0;
 }
 

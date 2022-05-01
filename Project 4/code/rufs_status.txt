@@ -2,7 +2,7 @@ get_avail_ino _complete
 get_avail_blkno _complete
 readi _complete
 writei _complete
-dir_find
+dir_find _complete
 dir_add
 dir_remove
 get_node_by_path
@@ -16,7 +16,7 @@ rufs_mkdir_complete
 rufs_rmdir _complete
 rufs_create _complete
 rufs_open _complete
-rufs_read
-rufs_write
-rufs_unlink
+rufs_read _complete
+rufs_write _complete
+rufs_unlink _complete
 
