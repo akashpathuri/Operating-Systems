@@ -17,6 +17,9 @@
 #define MAX_INUM 1024
 #define MAX_DNUM 16384
 
+#define DIR_TYPE 1
+#define FILE_TYPE 2
+
 
 struct superblock {
 	uint32_t	magic_num;			/* magic number */
