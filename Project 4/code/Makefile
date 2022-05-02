@@ -13,4 +13,5 @@ rufs: $(OBJ)
 .PHONY: clean
 clean:
 	rm -f *.o rufs
+	rm DISKFILE
 

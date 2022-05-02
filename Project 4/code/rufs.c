@@ -113,10 +113,14 @@ int writei(uint16_t ino, struct inode *inode) {
 		return 0;
 
 	// Step 2: Get the offset in the block where this inode resides on disk
-	int offset=(ino%inodes_per_block)*sizeof(struct inode);
+	int block_offset = ino%inodes_per_block;
+	block_offset *= sizeof(struct inode);
 
 	// Step 3: Write inode to disk 
-	memcpy(block+offset, inode, sizeof(struct inode));
+	struct inode* addrOfInode=(struct inode*) (block+block_offset); // make sure the cast doesn't make things break
+	*addrOfInode=*inode;
+
+	//memcpy(block+offset, inode, sizeof(struct inode));
 	return bio_write(block_number, block);
 	// if(bio_write(block_number, block)<0)
 	// 	return 0;
@@ -567,7 +571,7 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
  * Make file system
  */
 int rufs_mkfs() {
-	printf("RUFS init\n");
+	printf("RUFS mkfs\n");
 	// Call dev_init() to initialize (Create) Diskfile
 	dev_init(diskfile_path);
 	dev_open(diskfile_path);
@@ -636,7 +640,7 @@ static void *rufs_init(struct fuse_conn_info *conn) {
 		super_block = malloc(sizeof(struct superblock));
 		bio_read(disk_block, super_block);
 	}
-
+	printf("RUFS init finished\n");
 	return NULL;
 }
 
@@ -656,8 +660,10 @@ static int rufs_getattr(const char *path, struct stat *stbuf) {
 
 	// Step 1: call get_node_by_path() to get inode from path
 	struct inode *inode = malloc(sizeof(struct inode));
-	get_node_by_path(path, 0, inode);
-
+	if(get_node_by_path(path,0,inode)<0){
+		printf("Can't get attr of %s since it doesn't exist.\n",path);
+		return -ENOENT;
+	}
 	// Step 2: fill attribute of file into stbuf from inode
 
 	stbuf->st_mode   = S_IFDIR | 0755;
@@ -833,10 +839,11 @@ static int rufs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 
 	// Step 3: Call get_avail_ino() to get an available inode number
 	int empty_ino = get_avail_ino();
+
 	
 	// Step 4: Call dir_add() to add directory entry of target file to parent directory
 	dir_add(*parent_inode, empty_ino, target_file, strlen(target_file));
-	
+	printf("directory added \n");
 	// Step 5: Update inode for target file
 	struct inode *target_inode = malloc(sizeof(struct inode));
 	target_inode->ino = empty_ino;
@@ -846,7 +853,6 @@ static int rufs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	target_inode->link=1;				
 	for(int x=0; x<16; x++){
 		target_inode->direct_ptr[x]=-1;
-		target_inode->indirect_ptr[x/2]=-1;
 	}
 	struct stat* vstat=malloc(sizeof(struct stat));
 	vstat->st_mode   = S_IFREG | 0666;
@@ -856,7 +862,7 @@ static int rufs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	// Step 6: Call writei() to write inode to disk
 	writei(empty_ino, target_inode);
 
-	free(target_inode);
+	//free(target_inode);
 	free(parent_inode);
 	return 0;
 }
