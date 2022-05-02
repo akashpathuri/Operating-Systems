@@ -6,7 +6,7 @@ dir_find _complete
 dir_add
 dir_remove
 get_node_by_path
-rufs_mkfs 
+rufs_mkfs _complete
 rufs_init _complete
 rufs_destroy _complete
 rufs_getattr _complete
