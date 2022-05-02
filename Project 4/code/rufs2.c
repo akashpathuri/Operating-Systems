@@ -1,32 +1,3 @@
-get_avail_ino _complete
-get_avail_blkno _complete
-readi _complete
-writei _complete
-dir_find _complete
-dir_add
-dir_remove
-get_node_by_path
-rufs_mkfs _complete
-rufs_init _complete
-rufs_destroy _complete
-rufs_getattr _complete
-rufs_opendir _complete
-rufs_readdir _complete
-rufs_mkdir _complete
-rufs_rmdir _complete
-rufs_create _complete
-rufs_open _complete
-rufs_read _complete
-rufs_write _complete
-rufs_unlink _complete
-
-/*
- *  Copyright (C) 2022 CS416/518 Rutgers CS
- *	RU File System
- *	File:	rufs.c
- *
- */
-
 #define FUSE_USE_VERSION 26
 
 #include <fuse.h>

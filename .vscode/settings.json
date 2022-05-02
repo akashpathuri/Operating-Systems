@@ -9,7 +9,8 @@
 		"my_vm.h": "c",
 		"type_traits": "c",
 		"random": "c",
-		"stdio.h": "c"
+		"stdio.h": "c",
+		"fstream": "c"
 	},
 	"C_Cpp.errorSquiggles": "Disabled"
 }

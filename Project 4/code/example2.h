@@ -1,13 +1,4 @@
-/*
- *  Copyright (C) 2019 CS416 Spring 2019
- *
- *	Tiny File System
- *
- *	File:	tfs.h-
- *  Author: Yujie REN
- *	Date:	April 2019
- *
- */
+
 
 #include <linux/limits.h>
 #include <sys/stat.h>
@@ -78,7 +69,6 @@ int writei(uint16_t, struct inode *);
 struct inode* getInode(int);
 void initialize_file_inode(struct inode* );
 void initialize_dir_inode(struct inode* );
-
 
 
 #endif
