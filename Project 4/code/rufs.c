@@ -109,19 +109,46 @@ int writei(uint16_t ino, struct inode *inode) {
 	int block_number = super_block->i_start_blk;
 	block_number+= ino/inodes_per_block;
 
-	void *block = malloc(BLOCK_SIZE);
+	struct inode *block = malloc(BLOCK_SIZE);
 	if(bio_read(block_number, block)<0)
 		return 0;
 
 	// Step 2: Get the offset in the block where this inode resides on disk
 	int block_offset = ino%inodes_per_block;
-	block_offset *= sizeof(struct inode);
+	//block_offset *= sizeof(struct inode);
 
 	// Step 3: Write inode to disk 
-	struct inode* addrOfInode=(struct inode*) (block+block_offset); // make sure the cast doesn't make things break
-	*addrOfInode=*inode;
+	int offset = block_offset * sizeof(struct inode);
+	struct inode* addrOfInode=(struct inode*) (block+offset); // make sure the cast doesn't make things break
+	//*addrOfInode=*inode;
+	//block[block_offset] = *inode;
+	memcpy(addrOfInode, inode, sizeof(struct inode));
+	printf("writing inode in %d \n", block_number);
+	// struct inode *inode_entry = (struct inode *)block;
+	// for(int y = 0; y<dirent_per_block; y++){
+	// 	inode_entry = (struct inode *)inode_entry+y;
+	// 	if(inode_entry ==NULL || !inode_entry->valid ){
+	// 		memcpy(inode_entry, inode, sizeof(struct inode));
+	// 		//inode_entry = inode;
+	// 		//bio_write(block_number, block);
+	// 		break;
+	// 	}
+	// }
 
-	//memcpy(block+offset, inode, sizeof(struct inode));
+
+
+	// struct inode* end_of_block=(struct inode*) (block); // make sure the cast doesn't make things break
+	// for(int x = 0; x<inodes_per_block; x++){
+	// 	if(x == block_offset){
+	// 		//addrOfInode = inode;
+	// 		printf("writing inode to block at offset %d\n", block_offset);
+
+	// 	}else{
+	// 		printf("writing inode to block at offset -1\n");
+	// 	}
+	// 	end_of_block += sizeof(struct inode);
+		
+	// }
 	return bio_write(block_number, block);
 	// if(bio_write(block_number, block)<0)
 	// 	return 0;
@@ -160,6 +187,7 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
 			for(int y = 0; y<dirent_per_block; y++){
 				struct dirent *directory_entry = (struct dirent *)data_buffer+y;
 				if(directory_entry!=NULL && directory_entry->valid &&!strcmp(directory_entry->name, fname)){
+					printf("found dir with name %s\n", directory_entry->name);
 					dirent=directory_entry;
 					free(directory_inode);
 					free(data_buffer);
@@ -204,7 +232,8 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 			for(int y = 0; y<dirent_per_block; y++){
 				struct dirent *directory_entry = (struct dirent *)data_buffer+y;
 				if(directory_entry ==NULL || !directory_entry->valid ){
-					directory_entry = new_directory;
+					memcpy(directory_entry, new_directory, sizeof(struct dirent));
+					//directory_entry = new_directory;
 					bio_write(block_number, data_buffer);
 					break;
 				}
@@ -220,6 +249,7 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 			block_number += dir_inode.direct_ptr[x];
 			printf("writing at block %d with %d\n", block_number, dir_inode.direct_ptr[x]);
 			bio_write(block_number,new_dirent_block);
+
 			break;
 		}
 	}
@@ -237,6 +267,7 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 
 	// Write directory entry
 	// writei(dir_inode.ino, &dir_inode);
+	printf("root inode pointer %d\n", parent_inode->direct_ptr[0]);
 	writei(parent_ino,parent_inode);
 
 	return 0;
@@ -756,9 +787,7 @@ static int rufs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	// Step 4: Call dir_add() to add directory entry of target file to parent directory
 	dir_add(*parent_inode, empty_ino, target_file, strlen(target_file));
 	printf("directory added \n");
-	struct dirent* new_dirent_block=malloc(BLOCK_SIZE); 
-	dir_find(0, target_file, strlen(target_file),new_dirent_block);
-	free(new_dirent_block);
+	
 	// Step 5: Update inode for target file
 	struct inode *target_inode = malloc(sizeof(struct inode));
 	target_inode->ino = empty_ino;
@@ -775,10 +804,16 @@ static int rufs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	target_inode->vstat=*vstat;
 
 	// Step 6: Call writei() to write inode to disk
-	printf("writing Inode to %d", empty_ino);
+	printf("writing Inode to %d\n", empty_ino);
+	struct dirent* new_dirent_block=malloc(BLOCK_SIZE); 
+	dir_find(0, target_file, strlen(target_file),new_dirent_block);
+	free(new_dirent_block);
 	writei(empty_ino, target_inode);
+	struct dirent* new_dirent_block2=malloc(BLOCK_SIZE); 
+	dir_find(0, target_file, strlen(target_file),new_dirent_block2);
+	free(new_dirent_block2);
 
-	//free(target_inode);
+	free(target_inode);
 	free(parent_inode);
 	return 0;
 }
@@ -871,6 +906,14 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
 	// Step 3: Write the correct amount of data from offset to disk
 
 	// Step 1: You could call get_node_by_path() to get inode from path
+	char new_path[100];
+	strcpy(new_path, path);
+	char *parent_directory = dirname((char*) path);
+	char *target_file = basename((char*) new_path);
+	struct dirent* new_dirent_block=malloc(BLOCK_SIZE); 
+	dir_find(0, target_file, strlen(target_file),new_dirent_block);
+	free(new_dirent_block);
+
 	struct inode *inode = malloc(sizeof(struct inode));
 	if(get_node_by_path(path, 0, inode)==-1){
 		free(inode);
