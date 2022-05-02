@@ -567,7 +567,7 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
  * Make file system
  */
 int rufs_mkfs() {
-
+	printf("RUFS init\n");
 	// Call dev_init() to initialize (Create) Diskfile
 	dev_init(diskfile_path);
 	dev_open(diskfile_path);
@@ -621,6 +621,7 @@ int rufs_mkfs() {
  * FUSE file operations
  */
 static void *rufs_init(struct fuse_conn_info *conn) {
+	printf("RUFS init\n");
 	//initiliaze global variables
 	inodes_per_block = BLOCK_SIZE/sizeof(struct inode);
 	dirent_per_block = BLOCK_SIZE/sizeof(struct dirent);
@@ -640,6 +641,7 @@ static void *rufs_init(struct fuse_conn_info *conn) {
 }
 
 static void rufs_destroy(void *userdata) {
+	printf("RUFS destroy\n");
 
 	// Step 1: De-allocate in-memory data structures
 	free(super_block);
@@ -650,6 +652,7 @@ static void rufs_destroy(void *userdata) {
 }
 
 static int rufs_getattr(const char *path, struct stat *stbuf) {
+	printf("RUFS getattr\n");
 
 	// Step 1: call get_node_by_path() to get inode from path
 	struct inode *inode = malloc(sizeof(struct inode));
@@ -668,6 +671,7 @@ static int rufs_getattr(const char *path, struct stat *stbuf) {
 }
 
 static int rufs_opendir(const char *path, struct fuse_file_info *fi) {
+	printf("RUFS opendir\n");
 
 	// Step 1: Call get_node_by_path() to get inode from path
 	struct inode *inode = malloc(sizeof(struct inode));
@@ -682,6 +686,7 @@ static int rufs_opendir(const char *path, struct fuse_file_info *fi) {
 }
 
 static int rufs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
+	printf("RUFS readdir\n");
 
 	// Step 1: Call get_node_by_path() to get inode from path
 	struct inode *inode = malloc(sizeof(struct inode));
@@ -760,6 +765,7 @@ static int rufs_mkdir(const char *path, mode_t mode) {
 }
 
 static int rufs_rmdir(const char *path) {
+	printf("RUFS rmdir\n");
 
 	// Step 1: Use dirname() and basename() to separate parent directory path and target directory name
 	char *parent_directory = dirname((char*) path);
@@ -856,7 +862,8 @@ static int rufs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 }
 
 static int rufs_open(const char *path, struct fuse_file_info *fi) {
-
+	printf("RUFS Open\n");
+	
 	// Step 1: Call get_node_by_path() to get inode from path
 	struct inode *inode = malloc(sizeof(struct inode));
 	if(get_node_by_path(path, 0, inode)==-1){
@@ -870,6 +877,7 @@ static int rufs_open(const char *path, struct fuse_file_info *fi) {
 }
 
 static int rufs_read(const char *path, char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
+	printf("RUFS read\n");
 
 	// Step 1: You could call get_node_by_path() to get inode from path
 	struct inode *inode = malloc(sizeof(struct inode));
@@ -934,6 +942,7 @@ static int rufs_read(const char *path, char *buffer, size_t size, off_t offset, 
 }
 
 static int rufs_write(const char *path, const char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
+	printf("RUFS write\n");
 
 	// Step 2: Based on size and offset, read its data blocks from disk
 
@@ -1007,6 +1016,7 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
 }
 
 static int rufs_unlink(const char *path) {
+	printf("RUFS unlink\n");
 
 	// Step 1: Use dirname() and basename() to separate parent directory path and target file name
 	char *parent_directory = dirname((char*) path);

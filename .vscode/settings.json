@@ -8,7 +8,8 @@
 		"mman.h": "c",
 		"my_vm.h": "c",
 		"type_traits": "c",
-		"random": "c"
+		"random": "c",
+		"stdio.h": "c"
 	},
 	"C_Cpp.errorSquiggles": "Disabled"
 }

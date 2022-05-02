@@ -23,10 +23,9 @@
 #include <sys/time.h>
 #include <libgen.h>
 #include <limits.h>
-#include <math.h>
 
 #include "block.h"
-#include "example2.h"
+#include "rufs.h"
 
 char diskfile_path[PATH_MAX];
 
@@ -737,15 +736,7 @@ static void *tfs_init(struct fuse_conn_info *conn) {
 	return NULL;
 }
 
-static void tfs_destroy(void *userdata) {
-	printf("inode strct i size %d\n",sizeof(struct inode));
-	count_blocks_used();
-	// Step 1: De-allocate in-memory data structures
-	free(SB);
-	// Step 2: Close diskfile
-	dev_close(disk);
 
-}
 void count_blocks_used(){
 	bitmap_t inode_bitmap=malloc(BLOCK_SIZE);
 	bio_read(INODE_BITMAP_BLOCK,inode_bitmap);
@@ -766,6 +757,16 @@ void count_blocks_used(){
 	}
 	printf("number of data blocks used: %d\n",numDataBlocksUsed);
 	printf("number of inodes used: %d\n",numInodesUsed);
+}
+
+static void tfs_destroy(void *userdata) {
+	printf("inode strct i size %d\n",sizeof(struct inode));
+	count_blocks_used();
+	// Step 1: De-allocate in-memory data structures
+	free(SB);
+	// Step 2: Close diskfile
+	dev_close(disk);
+
 }
 static int tfs_getattr(const char *path, struct stat *stbuf) {
 

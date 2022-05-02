@@ -12,7 +12,7 @@ rufs_destroy _complete
 rufs_getattr _complete
 rufs_opendir _complete
 rufs_readdir _complete
-rufs_mkdir_complete
+rufs_mkdir _complete
 rufs_rmdir _complete
 rufs_create _complete
 rufs_open _complete
