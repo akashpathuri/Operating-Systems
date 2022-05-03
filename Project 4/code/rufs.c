@@ -126,12 +126,10 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
 	readi(ino, directory_inode);
 
   // Step 2: Get data block of current directory from inode
-	int *directory_data = directory_inode->direct_ptr;
- 
   // Step 3: Read directory's data block and check each directory entry.
    	struct dirent* data_buffer = malloc(BLOCK_SIZE);
 	for(int x = 0; x<16; x++){
-		int d_ptr = directory_data[x];
+		int d_ptr = directory_inode->direct_ptr[x];
 		int block_number = super_block->d_start_blk;
 		if(d_ptr >= 0){
 			// printf("Looping directory block %d\n", block_number+d_ptr);
@@ -267,15 +265,14 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 	// Note: You could either implement it in a iterative way or recursive way
 
 	if(strcmp(path,"/")==0 || strlen(path)<= 1){
-
 		//read root into inode
 		readi(0, inode);
 		return 1;
 	}
 
-	char path_cpy[256];
+	char path_cpy[1000];
 	strcpy(path_cpy, path);
-	char path_cpy2[256];
+	char path_cpy2[1000];
 	strcpy(path_cpy2, path);
 	char *parent_directory = dirname((char*) path_cpy);
 	char *target_file = basename((char*) path_cpy2);
@@ -378,6 +375,7 @@ static void rufs_destroy(void *userdata) {
 	printf("RUFS destroy\n");
 	
 
+	//Benchmarking values
 	int inode_count = MAX_INUM/inodes_per_block;
 	if(MAX_INUM%inodes_per_block)
 		inode_count++;
@@ -442,8 +440,8 @@ static int rufs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, 
 		free(inode);
 		return -1;
 	}
-	filler(buffer, ".", NULL,offset); // Current Directory
-	filler(buffer, "..", NULL,offset); // Parent Directory
+	filler(buffer, ".", NULL,offset);
+	filler(buffer, "..", NULL,offset);
 	// Step 2: Read directory entries from its data blocks, and copy them to filler
 	struct dirent* data_buffer=malloc(BLOCK_SIZE);
 	for(int x = 0; x<16; x++){
@@ -469,9 +467,9 @@ static int rufs_mkdir(const char *path, mode_t mode) {
 	printf("RUFS mkdir\n");
 
 	// Step 1: Use dirname() and basename() to separate parent directory path and target directory name
-	char path_cpy[256];
+	char path_cpy[1000];
 	strcpy(path_cpy, path);
-	char path_cpy2[256];
+	char path_cpy2[1000];
 	strcpy(path_cpy2, path);
 	char *parent_directory = dirname((char*) path_cpy);
 	char *target_directory = basename((char*) path_cpy2);
@@ -498,7 +496,6 @@ static int rufs_mkdir(const char *path, mode_t mode) {
 	target_inode->link=2;				
 	for(int x=0; x<16; x++){
 		target_inode->direct_ptr[x]=-1;
-		target_inode->indirect_ptr[x/2]=-1;
 	}
 	struct stat* vstat=malloc(sizeof(struct stat));
 	vstat->st_mode   = S_IFDIR | 0755;
@@ -518,9 +515,9 @@ static int rufs_rmdir(const char *path) {
 	printf("RUFS rmdir\n");
 
 	// Step 1: Use dirname() and basename() to separate parent directory path and target directory name
-	char path_cpy[256];
+	char path_cpy[1000];
 	strcpy(path_cpy, path);
-	char path_cpy2[256];
+	char path_cpy2[1000];
 	strcpy(path_cpy2, path);
 	char *parent_directory = dirname((char*) path_cpy);
 	char *target_directory = basename((char*) path_cpy2);
@@ -576,9 +573,9 @@ static int rufs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	printf("RUFS mkdir\n");
 
 	// Step 1: Use dirname() and basename() to separate parent directory path and target directory name
-	char path_cpy[256];
+	char path_cpy[1000];
 	strcpy(path_cpy, path);
-	char path_cpy2[256];
+	char path_cpy2[1000];
 	strcpy(path_cpy2, path);
 	char *parent_directory = dirname((char*) path_cpy);
 	char *target_file = basename((char*) path_cpy2);
@@ -604,7 +601,6 @@ static int rufs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	target_inode->link=1;				
 	for(int x=0; x<16; x++){
 		target_inode->direct_ptr[x]=-1;
-		target_inode->indirect_ptr[x/2]=-1;
 	}
 	struct stat* vstat=malloc(sizeof(struct stat));
 	vstat->st_mode   = S_IFREG | 0666;
@@ -777,10 +773,12 @@ static int rufs_unlink(const char *path) {
 	printf("RUFS unlink\n");
 
 	// Step 1: Use dirname() and basename() to separate parent directory path and target file name
-	char new_path[100];
-	strcpy(new_path, path);
-	char *parent_directory = dirname((char*) path);
-	char *target_file = basename((char*) new_path);
+	char path_cpy[1000];
+	strcpy(path_cpy, path);
+	char path_cpy2[1000];
+	strcpy(path_cpy2, path);
+	char *parent_directory = dirname((char*) path_cpy);
+	char *target_file = basename((char*) path_cpy2);
 
 	// Step 2: Call get_node_by_path() to get inode of target directory
 	struct inode *target_inode = malloc(sizeof(struct inode));
