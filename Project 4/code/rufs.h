@@ -17,6 +17,7 @@
 #define MAX_INUM 1024
 #define MAX_DNUM 16384
 
+#define SUPERBLOCK 0
 #define DIRECTORY 1
 #define FILE 2
 
@@ -49,6 +50,10 @@ struct dirent {
 	char name[208];					/* name of the directory entry */
 	uint16_t len;					/* length of name */
 };
+
+const int inodes_per_block = BLOCK_SIZE/sizeof(struct inode);
+const int dirent_per_block = BLOCK_SIZE/sizeof(struct dirent);
+
 
 
 /*

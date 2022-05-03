@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
 		exit(1);
 	}
 	printf("TEST 1: File create Success \n");
-
+	// exit(1);
 
 	/* Perform sequential writes */
 	for (i = 0; i < ITERS; i++) {
