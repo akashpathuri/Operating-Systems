@@ -21,7 +21,7 @@
 
 #include "block.h"
 #include "rufs.h"
-// double startTime = clock();
+
 char diskfile_path[PATH_MAX];
 
 // Declare your in-memory data structures here
@@ -376,6 +376,21 @@ static void *rufs_init(struct fuse_conn_info *conn) {
 
 static void rufs_destroy(void *userdata) {
 	printf("RUFS destroy\n");
+	
+
+	int inode_count = MAX_INUM/inodes_per_block;
+	if(MAX_INUM%inodes_per_block)
+		inode_count++;
+	printf("blocks for inodes: %d\n",inode_count);
+
+	bitmap_t data_bitmap=malloc(BLOCK_SIZE);
+	bio_read(super_block->d_bitmap_blk,data_bitmap);
+	int data_blocks_used=0;
+	for(int x=0; x<MAX_DNUM;x++){
+		if(get_bitmap(data_bitmap,x))
+			data_blocks_used++;
+	}
+	printf("number of data blocks used: %d\n",data_blocks_used);
 
 	// Step 1: De-allocate in-memory data structures
 	free(super_block);
@@ -862,7 +877,6 @@ int main(int argc, char *argv[]) {
 
 	fuse_stat = fuse_main(argc, argv, &rufs_ope, NULL);
 
-	// double endTime = clock();
-	// printf("The elapsed time is %f seconds", endTime-startTime);
+	
 	return fuse_stat;
 }
