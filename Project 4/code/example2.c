@@ -1144,57 +1144,57 @@ static int tfs_read(const char *path, char *buffer, size_t size, off_t offset, s
 
 	}
 	// block offset greater than or equal to 16
-else{
-	// printf("Offset %d >= 16\n", numBlockOffset);
-  int indirectOffset = offset - 16*BLOCK_SIZE; //
-  int numOffsetBlocks = indirectOffset/BLOCK_SIZE;
-  int numDirectBlocksPerIndirectPtr = BLOCK_SIZE/sizeof(int);
-  int numIndirectOffsetBlocks = numOffsetBlocks/numDirectBlocksPerIndirectPtr;
-  int directBlockOffset = numOffsetBlocks%numDirectBlocksPerIndirectPtr;
-  numByteOffset = indirectOffset%BLOCK_SIZE;
-	// previouslyUnallocated = 0;
+	else{
+		// printf("Offset %d >= 16\n", numBlockOffset);
+	int indirectOffset = offset - 16*BLOCK_SIZE; //
+	int numOffsetBlocks = indirectOffset/BLOCK_SIZE;
+	int numDirectBlocksPerIndirectPtr = BLOCK_SIZE/sizeof(int);
+	int numIndirectOffsetBlocks = numOffsetBlocks/numDirectBlocksPerIndirectPtr;
+	int directBlockOffset = numOffsetBlocks%numDirectBlocksPerIndirectPtr;
+	numByteOffset = indirectOffset%BLOCK_SIZE;
+		// previouslyUnallocated = 0;
 
-	// printf("This offset leads us to indirect slot #%d and inside that to direct block slot #%d with a byte offset of %d inside it\n", numIndirectOffsetBlocks, directBlockOffset, numByteOffset);
+		// printf("This offset leads us to indirect slot #%d and inside that to direct block slot #%d with a byte offset of %d inside it\n", numIndirectOffsetBlocks, directBlockOffset, numByteOffset);
 
-//16*blocksize + 50*blocksize + 50bytes ==> 16+50 blocks + 50 bytes ==> 50 indirect blocks + 50 bytes ==> 50/numDirectBlocksPerIndirectPtr is the indirect index, then 50%numDirectBlocksPerIndirectPtr is the block index inside that then offset%blocksize gives the byte offset. ==>
+	//16*blocksize + 50*blocksize + 50bytes ==> 16+50 blocks + 50 bytes ==> 50 indirect blocks + 50 bytes ==> 50/numDirectBlocksPerIndirectPtr is the indirect index, then 50%numDirectBlocksPerIndirectPtr is the block index inside that then offset%blocksize gives the byte offset. ==>
 
 
-for(indirect_ptr_index=numIndirectOffsetBlocks;indirect_ptr_index<8;indirect_ptr_index++){
-		if(inode->indirect_ptr[indirect_ptr_index]==-1){ // then unallocated
-			continue;
-		}
-		//read the entire block pointed to by indirect pointer
-    bio_read(SB->d_start_blk+inode->indirect_ptr[indirect_ptr_index],indirect_data_block);
-    for(direct_ptr_index=directBlockOffset;direct_ptr_index<numDirectBlocksPerIndirectPtr;direct_ptr_index++){
-			//initializing a block of allocated direct pointers
-			if(indirect_data_block[direct_ptr_index]==-1){
+	for(indirect_ptr_index=numIndirectOffsetBlocks;indirect_ptr_index<8;indirect_ptr_index++){
+			if(inode->indirect_ptr[indirect_ptr_index]==-1){ // then unallocated
 				continue;
 			}
-      //read the block pointed to by the direct pointers in the block pointed to by the indirect poointer
-      bio_read(SB->d_start_blk+indirect_data_block[direct_ptr_index],direct_data_block);
+			//read the entire block pointed to by indirect pointer
+		bio_read(SB->d_start_blk+inode->indirect_ptr[indirect_ptr_index],indirect_data_block);
+		for(direct_ptr_index=directBlockOffset;direct_ptr_index<numDirectBlocksPerIndirectPtr;direct_ptr_index++){
+				//initializing a block of allocated direct pointers
+				if(indirect_data_block[direct_ptr_index]==-1){
+					continue;
+				}
+		//read the block pointed to by the direct pointers in the block pointed to by the indirect poointer
+		bio_read(SB->d_start_blk+indirect_data_block[direct_ptr_index],direct_data_block);
 
-      //if number of bytes to read in the block is less than the desired size remaining
-      if(BLOCK_SIZE-numByteOffset<size-numBytesRead){
-        memcpy(bufferTail,direct_data_block,BLOCK_SIZE-numByteOffset);
-        bufferTail+=BLOCK_SIZE-numByteOffset;
-        numBytesRead+=BLOCK_SIZE-numByteOffset;
-      }
-      else{
-        memcpy(bufferTail,direct_data_block,size-numBytesRead);
-        numBytesRead+=size-numBytesRead;
-        time(& (inode->vstat.st_atime));
-        writei(inode->ino,inode);
-				free(inode);
-				free(direct_data_block);
-				free(indirect_data_block);
-				free(direct_ptr_block);
-        return numBytesRead;
-      }
-      numByteOffset=0;
+		//if number of bytes to read in the block is less than the desired size remaining
+		if(BLOCK_SIZE-numByteOffset<size-numBytesRead){
+			memcpy(bufferTail,direct_data_block,BLOCK_SIZE-numByteOffset);
+			bufferTail+=BLOCK_SIZE-numByteOffset;
+			numBytesRead+=BLOCK_SIZE-numByteOffset;
+		}
+		else{
+			memcpy(bufferTail,direct_data_block,size-numBytesRead);
+			numBytesRead+=size-numBytesRead;
+			time(& (inode->vstat.st_atime));
+			writei(inode->ino,inode);
+					free(inode);
+					free(direct_data_block);
+					free(indirect_data_block);
+					free(direct_ptr_block);
+			return numBytesRead;
+		}
+		numByteOffset=0;
 
-    }
-  }
-}
+		}
+	}
+	}
 	// Step 3: copy the correct amount of data from offset to buffer
 
 	// Note: this function should return the amount of bytes you copied to buffer
@@ -1282,56 +1282,56 @@ static int tfs_write(const char *path, const char *buffer, size_t size, off_t of
 				}
 				numByteOffset=0;
 		}
-	//if the data block has not been intialized
-	else{
-		//initialize a data block
-		// printf("should create a new data block\n");
-		int new_data_block=get_avail_blkno();
-		inode->direct_ptr[direct_ptr_index]=new_data_block;
+			//if the data block has not been intialized
+			else{
+				//initialize a data block
+				// printf("should create a new data block\n");
+				int new_data_block=get_avail_blkno();
+				inode->direct_ptr[direct_ptr_index]=new_data_block;
 
-		//now that we have initialized, let's write the data
-		bio_read(SB->d_start_blk+inode->direct_ptr[direct_ptr_index],direct_data_block);
-		//if number of bytes to read in the block is less than the desired size remaining
-		// printf("size - numbytes written is %d\n",size-numBytesWritten);
+				//now that we have initialized, let's write the data
+				bio_read(SB->d_start_blk+inode->direct_ptr[direct_ptr_index],direct_data_block);
+				//if number of bytes to read in the block is less than the desired size remaining
+				// printf("size - numbytes written is %d\n",size-numBytesWritten);
 
-		if(BLOCK_SIZE-numByteOffset<=size-numBytesWritten){
-			memcpy(direct_data_block,bufferTail,BLOCK_SIZE-numByteOffset);
-			//TODO: deal with size
-			bio_write(SB->d_start_blk+inode->direct_ptr[direct_ptr_index],direct_data_block);
-			inode->size+=BLOCK_SIZE-numByteOffset;
-			// printf("data block is %s\n",direct_data_block);
-			bufferTail+=BLOCK_SIZE-numByteOffset;
-			numBytesWritten+=BLOCK_SIZE-numByteOffset;
-		}
-		else if(size-numBytesWritten==0){
-			// printf("numBytesWritten2 is %d\n",numBytesWritten);
-			time(& (inode->vstat.st_mtime));
-			writei(inode->ino,inode);
-			free(inode);
-			free(direct_data_block);
-			free(indirect_data_block);
-			free(direct_ptr_block);
-			return numBytesWritten;
-		}
-		else{
-			memcpy(bufferTail,direct_data_block,size-numBytesWritten);
-			bio_write(SB->d_start_blk+inode->direct_ptr[direct_ptr_index],direct_data_block);
-			inode->size+=size-numBytesWritten;
+				if(BLOCK_SIZE-numByteOffset<=size-numBytesWritten){
+					memcpy(direct_data_block,bufferTail,BLOCK_SIZE-numByteOffset);
+					//TODO: deal with size
+					bio_write(SB->d_start_blk+inode->direct_ptr[direct_ptr_index],direct_data_block);
+					inode->size+=BLOCK_SIZE-numByteOffset;
+					// printf("data block is %s\n",direct_data_block);
+					bufferTail+=BLOCK_SIZE-numByteOffset;
+					numBytesWritten+=BLOCK_SIZE-numByteOffset;
+				}
+				else if(size-numBytesWritten==0){
+					// printf("numBytesWritten2 is %d\n",numBytesWritten);
+					time(& (inode->vstat.st_mtime));
+					writei(inode->ino,inode);
+					free(inode);
+					free(direct_data_block);
+					free(indirect_data_block);
+					free(direct_ptr_block);
+					return numBytesWritten;
+				}
+				else{
+					memcpy(bufferTail,direct_data_block,size-numBytesWritten);
+					bio_write(SB->d_start_blk+inode->direct_ptr[direct_ptr_index],direct_data_block);
+					inode->size+=size-numBytesWritten;
 
-			numBytesWritten+=size-numBytesWritten;
-			//TODO: free here
-			time(& (inode->vstat.st_mtime));
-			writei(inode->ino,inode);
-			// printf("numBytesWritten3 is %d\n",numBytesWritten);
-			free(inode);
-			free(direct_data_block);
-			free(indirect_data_block);
-			free(direct_ptr_block);
-			return numBytesWritten;
+					numBytesWritten+=size-numBytesWritten;
+					//TODO: free here
+					time(& (inode->vstat.st_mtime));
+					writei(inode->ino,inode);
+					// printf("numBytesWritten3 is %d\n",numBytesWritten);
+					free(inode);
+					free(direct_data_block);
+					free(indirect_data_block);
+					free(direct_ptr_block);
+					return numBytesWritten;
+				}
+				numByteOffset=0;
+			}
 		}
-		numByteOffset=0;
-	}
-}
 	//if we have read everything, return;
 	if(numBytesWritten>=size){
 		//do some freeing

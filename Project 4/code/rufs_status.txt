@@ -17,7 +17,7 @@ rufs_rmdir 			_complete
 rufs_create 		_incomplete
 rufs_open 			_complete
 rufs_read 			_complete
-rufs_write 
+rufs_write 			_complete
 rufs_unlink  		_complete
 
 

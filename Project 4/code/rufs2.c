@@ -386,7 +386,7 @@ int get_directory_and_file_name(char *path, char* dir_name, char* file_name){
 	return -1;
 }
 
-int split_path_name(char* dir_path, char* first_dir, char* remaining){
+void split_path_name(char* dir_path, char* first_dir, char* remaining){
 	int i=0;
 	int len=strlen(dir_path);
 	if(dir_path[0]=='/'){
@@ -396,10 +396,10 @@ int split_path_name(char* dir_path, char* first_dir, char* remaining){
 		if(dir_path[i]=='/'){
 			strncpy(first_dir,dir_path,i);
 			strncpy(remaining,dir_path+i+1,len-i-1);
-			return 0;
+			return;
 		}
 	}
-	return -1;
+	return;
 }
 
 int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
@@ -411,24 +411,25 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 		// Step 1: Resolve the path name, walk through path, and finally, find its inode.
 	// Note: You could either implement it in a iterative way or recursive way
 	//Make sure to calloc so null termnator is included
+
 	if(strcmp(path,"/")==0 || strlen(path)==0){
-		printf("only asked for root.\n");
+		printf("Root node is the only one requested.\n"); //print statement change
 		//read root into inode
 		readi(0,inode);
 		return 0;
 	}
-	char* dir_path_name=calloc(DIRECT_SIZE,sizeof(char));//1024
-	char* file_path_name=calloc(FILE_SIZE,sizeof(char)); //256
-	dir_path_name = dirname((char*) path);
+	char* dir_path_name=calloc(DIRECT_SIZE,sizeof(char));//1024 slight name change
+	char* file_path_name=calloc(FILE_SIZE,sizeof(char)); //256 slight name change
+	dir_path_name = dirname((char*) path); //different than get_directory_and_file_name()
 	file_path_name = basename((char*) path);
 	//get_directory_and_file_name((char*)path,dir_path_name,file_path_name);
 	
 	printf("dir path is: %s and file is: %s\n",dir_path_name,file_path_name);
 	char* first_dir=calloc(DIRENT_SIZE,sizeof(char)); //512
-	char* remaining=calloc(DIRECT_SIZE,sizeof(char)); //1024
-	int has_slash=0;
-	uint16_t prev_ino=0;
-	struct dirent * dir=calloc(1,sizeof(struct dirent));
+	char* remaining=calloc(DIRECT_SIZE,sizeof(char)); //1024 (slight changes, created constants at the top of rufs2.c)
+	//int has_slash=0;
+	uint16_t prev_ino=0;//name change
+	struct dirent* dir=calloc(1,sizeof(struct dirent));
 	
 	if(strlen(dir_path_name)==0){
 		printf("path is root.\n");
@@ -436,12 +437,17 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 	}
 
 
-	while(has_slash!=-1){
-		has_slash=split_path_name(dir_path_name,first_dir,remaining);
-		if(has_slash==-1){
+	while(strlen(dir_path_name)>0){ //major change here (possibly wrong)
+
+		split_path_name(dir_path_name,first_dir,remaining); //changed to void function
+		//helper method to separate first directory and the remaining directories to traverse, dir_path_name stores all directories
+		//first_dir after method call will hold the first directory to handle and future ones as well
+		//remaining are the characters remaining after the first directory substring 
+		
+		if(strlen(dir_path_name)==0){ //changed has_slash to strlen(dir-path-name) ==> Has_slash only is -1 when dir_path_name has length of 0 (possibly wrong need test)
 			int find_status=dir_find(prev_ino, dir_path_name, strlen(dir_path_name)+1, dir);
 			if(find_status<0){
-				printf("node doesn't exist\n");
+				printf("failed to find node\n");
 				free(dir_path_name);
 				free(file_path_name);
 				free(first_dir);
@@ -449,17 +455,18 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 				free(dir);
 				return find_status;
 			}
+			
 			prev_ino=dir->ino;
-			memset(dir_path_name, 0, 1024);
+			memset(dir_path_name, 0, DIRECT_SIZE); //1024
 			strcpy(dir_path_name,remaining);
-			memset(remaining, 0, 1024);
-			memset(first_dir,0,512);
+			memset(remaining, 0, DIRECT_SIZE); //1024
+			memset(first_dir,0,DIRENT_SIZE); //512
 			break;
 		}
 		//printf("split of dir path is: %s and file is: %s\n",first_dir,remaining);
 		int find_status=dir_find(prev_ino, first_dir, strlen(first_dir)+1, dir);
 		if(find_status<0){
-			printf("node doesn't exist\n");
+			printf("Failed to find node\n");
 			free(dir_path_name);
 			free(file_path_name);
 			free(first_dir);
@@ -468,15 +475,15 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 			return find_status;
 		}
 		prev_ino=dir->ino;
-		memset(dir_path_name, 0, 1024);
+		memset(dir_path_name, 0, DIRECT_SIZE); //1024
 		strcpy(dir_path_name,remaining);
-		memset(remaining, 0, 1024);
-		memset(first_dir,0,512);
+		memset(remaining, 0, DIRECT_SIZE);//1024
+		memset(first_dir,0,DIRENT_SIZE); //512
 
 	}
 	int find_status=dir_find(prev_ino, file_path_name, strlen(file_path_name)+1, dir);
 	if(find_status<0){
-		printf("couldn't find the file\n");
+		printf("dir_find failed\n");
 		free(dir_path_name);
 		free(file_path_name);
 		free(first_dir);
@@ -484,11 +491,11 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 		free(dir);
 		return find_status;
 	}
-	struct inode* final_inode=calloc(1,sizeof(struct inode));
-	int read_status=readi(dir->ino,final_inode);
+	struct inode* return_node=calloc(1,sizeof(struct inode));
+	int read_status=readi(dir->ino,return_node);
 	if(read_status<0)
 		{
-			printf("bad read\n");
+			printf("read failed.\n");
 			free(dir_path_name);
 			free(file_path_name);
 			free(first_dir);
@@ -496,8 +503,8 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 			free(dir);
 			return read_status;
 		}
-	// printf("&&&& found inode %d\n",final_inode->ino);
-	memcpy(inode,final_inode,sizeof(struct inode));
+	// printf("&&&& found inode %d\n",return_node->ino);
+	memcpy(inode,return_node,sizeof(struct inode));
 	free(dir_path_name);
 	free(file_path_name);
 	free(first_dir);

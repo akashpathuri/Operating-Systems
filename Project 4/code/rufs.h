@@ -22,7 +22,6 @@
 #define FILE 2
 
 
-typedef enum _TFS_TYPE{rufs_DIRECTORY=1,rufs_FILE=2}TFS_TYPE;
 struct superblock {
 	uint32_t	magic_num;			/* magic number */
 	uint16_t	max_inum;			/* maximum inode number */
@@ -73,12 +72,12 @@ uint8_t get_bitmap(bitmap_t b, int i) {
     return b[i / 8] & (1 << (i & 7)) ? 1 : 0;
 }
 
-int readi(uint16_t, struct inode *);
-int writei(uint16_t, struct inode *);
-struct inode* getInode(int);
-void initialize_file_inode(struct inode* );
-void initialize_dir_inode(struct inode* );
-void initialize_direct_ptr_block(int blockNum);
+// int readi(uint16_t, struct inode *);
+// int writei(uint16_t, struct inode *);
+// struct inode* getInode(int);
+// void initialize_file_inode(struct inode* );
+// void initialize_dir_inode(struct inode* );
+// void initialize_direct_ptr_block(int blockNum);
 
 
 #endif
